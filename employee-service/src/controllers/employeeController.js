@@ -199,3 +199,47 @@ exports.updateEmployee = async (req, res) => {
     });
   }
 };
+exports.deleteEmployee = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    // Check employee exists
+    const [employees] = await db.query(
+      `
+      SELECT *
+      FROM employees
+      WHERE employee_id = ?
+      `,
+      [employeeId]
+    );
+
+    if (employees.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found"
+      });
+    }
+
+    // Delete employee
+    await db.query(
+      `
+      DELETE FROM employees
+      WHERE employee_id = ?
+      `,
+      [employeeId]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Employee deleted successfully"
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
+  }
+};
