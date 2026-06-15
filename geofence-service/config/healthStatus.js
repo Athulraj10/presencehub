@@ -1,7 +1,6 @@
-let dbStatus = "DISCONNECTED";
-let rabbitmqStatus = "DISCONNECTED";
-
-module.exports = {
-    dbStatus,
-    rabbitmqStatus
+const healthStatus = {
+    database: "DISCONNECTED",
+    rabbitmq: "DISCONNECTED"
 };
+
+module.exports = healthStatus;

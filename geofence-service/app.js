@@ -1,72 +1,35 @@
 require("dotenv").config();
 
-const express = require("express");
+const express =
+    require("express");
 
-// Database Connection
 require("./config/db");
 
-// RabbitMQ Connection
-const connectRabbitMQ = require("./config/rabbitmq");
+const connectRabbitMQ =
+    require("./config/rabbitmq");
+
+const geofenceRoutes =
+    require("./routes/geofenceRoutes");
+
+const errorHandler =
+    require("./middleware/errorHandler");
 
 const app = express();
 
 app.use(express.json());
 
-/*
-|--------------------------------------------------------------------------
-| Routes
-|--------------------------------------------------------------------------
-*/
+app.use("/", geofenceRoutes);
 
-// Home Route
-app.get("/", (req, res) => {
-    res.send("Geofence Service Running");
-});
+connectRabbitMQ();
 
-// Enhanced Health Endpoint
-app.get("/health", (req, res) => {
+app.use(errorHandler);
 
-    res.status(200).json({
-
-        service: "geofence-service",
-
-        status: "UP",
-
-        database:
-            global.dbStatus || "DISCONNECTED",
-
-        rabbitmq:
-            global.rabbitmqStatus || "DISCONNECTED"
-
-    });
-
-});
-
-// Placeholder Geofence Validation API
-app.post("/geofence/validate", (req, res) => {
-    res.status(200).json({
-        message: "Not implemented yet"
-    });
-});
-
-/*
-|--------------------------------------------------------------------------
-| RabbitMQ Connection
-|--------------------------------------------------------------------------
-*/
-
-(async () => {
-    await connectRabbitMQ();
-})();
-
-/*
-|--------------------------------------------------------------------------
-| Server
-|--------------------------------------------------------------------------
-*/
-
-const PORT = process.env.PORT || 3002;
+const PORT =
+    process.env.PORT || 3002;
 
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+
+    console.log(
+        `Server running on port ${PORT}`
+    );
 });
