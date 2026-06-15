@@ -1,8 +1,7 @@
 require("dotenv").config();
 
 const amqp = require("amqplib");
-
-global.rabbitmqStatus = "DISCONNECTED";
+const healthStatus = require("./healthStatus");
 
 async function connectRabbitMQ() {
 
@@ -12,34 +11,27 @@ async function connectRabbitMQ() {
             process.env.RABBITMQ_URL
         );
 
-        const channel =
-        await connection.createChannel();
+        const channel = await connection.createChannel();
 
-        await channel.assertQueue(
-            "attendance.punchin"
-        );
-
-        await channel.assertQueue(
-            "attendance.punchout"
-        );
-
-        global.rabbitmqStatus = "CONNECTED";
+        healthStatus.rabbitmq = "CONNECTED";
 
         console.log(
-            "RabbitMQ Connected Successfully"
+            "✅ RabbitMQ Connected Successfully"
         );
 
         return channel;
 
     } catch (error) {
 
-        global.rabbitmqStatus =
-        "DISCONNECTED";
+        healthStatus.rabbitmq = "DISCONNECTED";
 
         console.log(
-            "RabbitMQ Connection Failed"
+            "❌ RabbitMQ Connection Failed"
         );
+
+        console.log(error.message);
     }
 }
 
 module.exports = connectRabbitMQ;
+    
