@@ -332,10 +332,3 @@ RABBITMQ_URL=amqp://localhost
 * Add Redis caching layer
 * Add rate limiting at gateway level
 
----
-
-If you want, I can also:
-
-* Turn this into a **GitHub-ready README.md file**
-* Add **architecture diagram (visual)**
-* Or clean your project into a **production-grade folder structure**
