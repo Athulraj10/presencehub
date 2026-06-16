@@ -11,6 +11,9 @@ module.exports = (validateJwtOnlyIfServiceIsApproved) => {
     }));
 
     return router;
+<<<<<<< HEAD
+};
+=======
 };
 
 
@@ -23,3 +26,4 @@ module.exports = (validateJwtOnlyIfServiceIsApproved) => {
 
 
 
+>>>>>>> 6a69965f91e1e636c5845440f8f30890e3968d1d
