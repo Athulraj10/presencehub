@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # Attendance Services
+=======
+# Attendance Service
+>>>>>>> 6a69965f91e1e636c5845440f8f30890e3968d1d
 
 ## Project Overview
 
