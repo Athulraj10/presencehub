@@ -1,0 +1,23 @@
+{
+  "name": "geofence-service",
+  "version": "1.0.0",
+  "description": "Geofence Service",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "amqplib": "^0.10.9",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "geolib": "^3.3.14",
+    "mysql2": "^3.14.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
