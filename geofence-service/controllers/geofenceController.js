@@ -4,6 +4,10 @@ const {
     validateLocation
 } = require("../services/geofenceService");
 
+const {
+    publishGeofenceEvent
+} = require("../services/rabbitmqPublisher");
+
 exports.healthCheck = (req, res) => {
 
     res.status(200).json({
@@ -12,23 +16,58 @@ exports.healthCheck = (req, res) => {
         database: healthStatus.database,
         rabbitmq: healthStatus.rabbitmq
     });
+
 };
 
-exports.validateGeofence = async (req, res) => {
+exports.validateGeofence = async (
+    req,
+    res,
+    next
+) => {
 
-    const {
-        employeeId,
-        latitude,
-        longitude
-    } = req.body;
+    try {
 
-    const result = await validateLocation(
-        latitude,
-        longitude
-    );
+        const {
+            employeeId,
+            latitude,
+            longitude
+        } = req.body;
 
-    res.status(200).json({
-        employeeId,
-        ...result
-    });
+        const result =
+            await validateLocation(
+                latitude,
+                longitude
+            );
+
+        await publishGeofenceEvent({
+            employeeId,
+            officeName:
+                result.officeName,
+
+            distance:
+                result.distance,
+
+            radius:
+                result.radius,
+
+            insideGeofence:
+                result.insideGeofence,
+
+            timestamp:
+                new Date()
+        });
+
+        res.status(200).json({
+            employeeId,
+            ...result
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        next(error);
+
+    }
+
 };
