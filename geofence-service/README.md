@@ -1,103 +1,110 @@
-# PresenceHub
-
-# Geofence Service
+# PresenceHub – Geofence Service
 
 ## Overview
 
-The Geofence Service is responsible for validating whether an employee is inside or outside a predefined office geofence area.
+The Geofence Service is a microservice within the PresenceHub HRMS platform responsible for validating employee attendance eligibility based on geographical location.
 
-The service uses employee latitude and longitude coordinates to calculate the distance from the office location and determine geofence eligibility.
+The service receives employee GPS coordinates, calculates the distance from the configured office location, determines whether the employee is inside the allowed geofence radius, and publishes attendance-related events through RabbitMQ for further processing by other services.
 
 ---
 
-## Day 1 Completed
+# Project Objectives
 
-### Features Implemented
+* Validate employee location using GPS coordinates
+* Calculate distance between employee and office
+* Support dynamic geofence configuration from MySQL
+* Publish attendance events using RabbitMQ
+* Provide REST APIs for geofence validation
+* Support scalable event-driven architecture
 
-* Express Server Setup
-* Route Structure
-* Controller Structure
-* Middleware Setup
-* MySQL Configuration
-* RabbitMQ Configuration
-* Health Check API
+---
+
+# Features Implemented
+
+## Day 1 – Project Setup & Infrastructure
+
+### Completed Tasks
+
+* Express.js Server Setup
+* Project Structure Creation
+* Route Configuration
+* Controller Layer Setup
+* Middleware Configuration
+* MySQL Database Integration
+* RabbitMQ Integration
 * Environment Configuration
-* Git Ignore Setup
+* Health Check API
 * Error Handling Middleware
-* Health Status Management
+* Health Status Monitoring
 
 ---
 
-## Day 2 Completed
+## Day 2 – Geofence Validation Logic
 
-### Features Implemented
+### Completed Tasks
 
 * Service Layer Implementation
 * Geolib Integration
 * Distance Calculation Logic
 * Geofence Validation API
-* Office Geofence Configuration
 * Request Validation Middleware
-* Controller and Service Integration
-* Route and Middleware Integration
-* Thunder Client Testing
-* Valid and Invalid Request Testing
+* Controller-Service Integration
+* Route-Middleware Integration
+* API Testing using Thunder Client
 
 ---
 
-## Day 3 Completed
+## Day 3 – Database Driven Geofence Configuration
 
-### Features Implemented
+### Completed Tasks
 
 * Geofence Database Table Creation
-* Office Coordinates Stored in MySQL
+* Office Location Storage in MySQL
 * Dynamic Geofence Configuration
-* Database Driven Geofence Validation
-* Fetch Geofence Data from MySQL
-* Removed Hardcoded Office Coordinates
+* Database Driven Validation
 * Dynamic Radius Configuration
 * Dynamic Office Name Configuration
-* MySQL Query Integration in Service Layer
-* Database Validation Testing
+* MySQL Query Integration
+* Removal of Hardcoded Coordinates
 
 ---
 
-## Day 4 Completed
+## Day 4 – RabbitMQ Event Integration
 
-### Features Implemented
+### Completed Tasks
 
-* RabbitMQ Event Publishing
-* RabbitMQ Consumer Implementation
-* Queue Creation and Management
+* RabbitMQ Event Publisher
+* RabbitMQ Consumer
+* Queue Management
+* Event Payload Creation
 * Event Driven Communication
 * Geofence Event Processing
-* Event Payload Generation
-* RabbitMQ Producer Integration
-* RabbitMQ Consumer Testing
+* Producer Testing
+* Consumer Testing
 * End-to-End Event Verification
-* Queue Based Communication Testing
 
 ---
 
-## Day 5 Completed
+## Day 5 – Production Readiness & Testing
 
-### Features Implemented
+### Completed Tasks
 
 * Request Logging Middleware
-* Controller Try-Catch Error Handling
-* Centralized Error Handling Improvements
-* API Error Response Standardization
+* Centralized Error Handling
+* Try-Catch Controller Handling
+* Standardized API Error Responses
 * Invalid Request Testing
 * Invalid Geofence Testing
-* RabbitMQ Event Verification
+* RabbitMQ Verification
 * Final API Testing
-* Production Readiness Validation
 * Documentation Updates
+* Production Readiness Validation
 
 ---
 
-## Project Structure
+# Project Structure
 
+```text
 presencehub/
 │
 └── geofence-service/
@@ -122,30 +129,108 @@ presencehub/
     │   ├── geofenceService.js
     │   └── rabbitmqPublisher.js
     │
-    ├── node_modules/
+    ├── tests/
+    │   ├── test-db.js
+    │   ├── test-rabbit.js
+    │   └── test-consumer.js
+    │
+    ├── database/
+    │   └── geofence.sql
+    │
+    ├── logs/
     │
     ├── .env
     ├── .gitignore
-    ├── app.js
     ├── package.json
     ├── package-lock.json
-    │
-    ├── test.js
-    ├── test-rabbit.js
-    ├── test-consumer.js
-    │
-    └── README.md
-    
-## Technologies Used
+    ├── README.md
+    └── app.js
+```
+
+---
+
+# Technologies Used
+
+### Backend
 
 * Node.js
 * Express.js
+
+### Database
+
 * MySQL
+
+### Messaging
+
 * RabbitMQ
+
+### Libraries
+
 * Geolib
+* Dotenv
+
+### Testing
+
 * Thunder Client
 
 ---
+
+# Available APIs
+
+## Health Check API
+
+### Request
+
+```http
+GET /health
+```
+
+### Response
+
+```json
+{
+  "service": "geofence-service",
+  "status": "UP",
+  "database": "CONNECTED",
+  "rabbitmq": "CONNECTED"
+}
+```
+
+---
+
+## Geofence Validation API
+
+### Request
+
+```http
+POST /geofence/validate
+```
+
+### Request Body
+
+```json
+{
+  "employeeId": 101,
+  "latitude": 8.560370308647784,
+  "longitude": 76.88028618296313
+}
+```
+
+### Success Response
+
+```json
+{
+  "employeeId": 101,
+  "officeName": "GNX Digital Solutions",
+  "distance": 0,
+  "radius": 100,
+  "insideGeofence": true
+}
+```
+
+---
+
+# System Workflow
 
 ## Geofence Validation Flow
 
@@ -158,7 +243,7 @@ Controller
    ↓
 Service Layer
    ↓
-Fetch Geofence From MySQL
+Fetch Geofence Configuration
    ↓
 Distance Calculation
    ↓
@@ -187,61 +272,71 @@ Event Processed
 
 ---
 
-## Current Progress
+# Testing Performed
 
-### Day 1 Status
+### API Testing
+
+* Health Check API Testing
+* Geofence Validation Testing
+* Invalid Request Testing
+* Invalid Location Testing
+
+### Database Testing
+
+* MySQL Connectivity Testing
+* Geofence Data Retrieval Testing
+
+### RabbitMQ Testing
+
+* Producer Testing
+* Consumer Testing
+* Queue Verification
+
+---
+
+# Final Deliverables
+
+* Health Check API
+* Geofence Validation API
+* Dynamic Geofence Management
+* MySQL Integration
+* RabbitMQ Integration
+* Event Driven Architecture
+* Logging Middleware
+* Error Handling Middleware
+* API Documentation
+
+---
+
+# Project Status
+
+### Day 1
 
 Completed ✅
 
-### Day 2 Status
+### Day 2
 
 Completed ✅
 
-### Day 3 Status
+### Day 3
 
 Completed ✅
 
-### Day 4 Status
+### Day 4
 
 Completed ✅
 
-### Day 5 Status
+### Day 5
 
 Completed ✅
 
 ---
 
-## Overall Progress
+# Overall Completion
 
 ### Geofence Service Backend
 
 100% Complete ✅
-
-### Successfully Implemented
-
-* Dynamic Geofence Validation
-* MySQL Integration
-* RabbitMQ Integration
-* Event Driven Architecture
-* Request Validation
-* Error Handling
-* Logging
-* API Testing
-* Consumer Testing
-* Production Ready Backend
-
----
-
-## Final Deliverables
-
-* Health Check API
-* Geofence Validation API
-* Database Driven Geofence Management
-* RabbitMQ Event Publishing
-* RabbitMQ Consumer
-* Logging Middleware
-* Error Handling Middleware
-* Documentation
 
 ---
 
