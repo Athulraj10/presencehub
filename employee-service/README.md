@@ -2,69 +2,109 @@
 
 ## Overview
 
-The Employee Service is responsible for managing employee records, authentication, authorization, and HR management within the PresenceHub system.
+The Employee Service is a core microservice within the PresenceHub HRMS ecosystem responsible for employee lifecycle management, authentication, authorization, and HR administration.
 
-It provides employee CRUD operations, JWT-based authentication, role-based access control, and RabbitMQ event publishing for employee lifecycle events.
+The service provides secure employee management capabilities through JWT-based authentication, Role-Based Access Control (RBAC), MySQL persistence, and RabbitMQ event publishing for inter-service communication.
 
 ---
 
-## Features Implemented
+## Key Responsibilities
+
+- Employee Registration and Management
+- Authentication and Authorization
+- HR Management
+- Role-Based Access Control (RBAC)
+- Employee Data Validation
+- RabbitMQ Event Publishing
+- MySQL Database Operations
+
+---
+
+## Features
 
 ### Employee Management
 
-* Create Employee
-* Get Employee By ID
-* Get All Employees
-* Update Employee
-* Delete Employee
-
-### Authentication
-
-* Employee Login
-* JWT Token Generation
-* JWT Verification Middleware
-* Protected Routes
-
-### Authorization
-
-* Role-Based Access Control (RBAC)
-* Admin Access Control
-* HR Access Control
-* Employee Access Control
+- Register Employee
+- Retrieve Employee Details
+- Retrieve All Employees
+- Update Employee Information
+- Delete Employee Records
 
 ### HR Management
 
-* Create HR
-* Get All HR
-* Get HR By ID
-* Update HR
-* Delete HR
+- Create HR Accounts
+- Retrieve HR Details
+- Retrieve All HR Records
+- Update HR Information
+- Delete HR Records
 
-### RabbitMQ Integration
+### Authentication & Security
 
-Published Events:
+- JWT-Based Authentication
+- Password Hashing using bcrypt
+- Protected API Endpoints
+- Role-Based Authorization
+- Employee Self-Profile Access Restriction
 
-* employee.created
-* employee.updated
-* employee.deleted
+### Validation
 
-### Database Integration
+- Employee ID Validation
+- Email Format Validation
+- Department Validation
+- Password Strength Validation
+- Duplicate Employee Prevention
+- Duplicate Email Prevention
 
-* MySQL Database Connectivity
-* Employee Data Persistence
-* Password Hashing using bcrypt
+### Event-Driven Communication
+
+The service publishes RabbitMQ events for employee lifecycle operations:
+
+- `employee.created`
+- `employee.updated`
+- `employee.deleted`
 
 ---
 
-## Technologies Used
+## Access Control
 
-* Node.js
-* Express.js
-* MySQL
-* RabbitMQ
-* JWT
-* bcrypt
-* dotenv
+The Employee Service implements Role-Based Access Control (RBAC) to ensure secure access to resources and operations.
+
+### Employee
+
+* Authenticate using valid credentials.
+* View personal profile information.
+* Access only authorized employee resources.
+
+### HR
+
+* View employee records.
+* Manage employee information.
+* Access HR management endpoints.
+* Perform employee update operations.
+
+### Administrator
+
+* Full access to employee and HR management functionalities.
+* Create, update, and delete employee records.
+* Create, update, and delete HR accounts.
+* Access all protected administrative endpoints.
+
+Authentication is enforced using JWT-based authorization middleware, while role validation is handled through dedicated RBAC middleware to restrict access to sensitive operations.
+
+
+---
+
+## Technology Stack
+
+| Technology | Purpose |
+|------------|---------|
+| Node.js | Runtime Environment |
+| Express.js | REST API Framework |
+| MySQL | Relational Database |
+| RabbitMQ | Message Broker |
+| JWT | Authentication |
+| bcrypt | Password Hashing |
+| dotenv | Environment Configuration |
 
 ---
 
@@ -86,105 +126,4 @@ employee-service/
 │   │   ├── authMiddleware.js
 │   │   └── roleMiddleware.js
 │   │
-│   ├── routes/
-│   │   ├── employeeRoutes.js
-│   │   └── hrRoutes.js
-│   │
-│   ├── app.js
-│   └── server.js
-│
-├── .env
-├── package.json
-└── README.md
-```
-
----
-
-## Authentication Flow
-
-```text
-Login Request
-      ↓
-Validate Credentials
-      ↓
-Generate JWT Token
-      ↓
-Return Token
-      ↓
-Protected API Access
-```
-
----
-
-## Available APIs
-
-### Employee APIs
-
-#### Register Employee
-
-```http
-POST /employees/register
-```
-
-#### Login Employee
-
-```http
-POST /employees/login
-```
-
-#### Get All Employees
-
-```http
-GET /employees
-```
-
-#### Get Employee By ID
-
-```http
-GET /employees/:employeeId
-```
-
-#### Update Employee
-
-```http
-PUT /employees/:employeeId
-```
-
-#### Delete Employee
-
-```http
-DELETE /employees/:employeeId
-```
-
----
-
-### HR APIs
-
-#### Create HR
-
-```http
-POST /hr
-```
-
-#### Get All HR
-
-```http
-GET /hr
-```
-
-#### Get HR By ID
-
-```http
-GET /hr/:employeeId
-```
-
-#### Update HR
-
-```http
-PUT /hr/:employeeId
-```
-
-#### Delete HR
-
-```
-```
+│   ├── routes

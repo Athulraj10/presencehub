@@ -1,4 +1,4 @@
-const db = require("../config/db");
+ const db = require("../config/db");
 const { getChannel } = require("../config/rabbitmq");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -6,13 +6,12 @@ const jwt = require("jsonwebtoken");
 // Register Employee
 exports.registerEmployee = async (req, res) => {
   try {
-   const {
+  const {
   employeeId,
   name,
   email,
   department,
-  password,
-  role
+  password
 } = req.body;
 
 
@@ -29,7 +28,12 @@ exports.registerEmployee = async (req, res) => {
         message: "All fields are required"
       });
     }
-
+if (password.length < 8) {
+  return res.status(400).json({
+    success: false,
+    message: "Password must be at least 8 characters"
+  });
+}
     // Employee ID validation
     const employeeIdRegex = /^EMP\d+$/;
 
@@ -117,7 +121,7 @@ VALUES (?, ?, ?, ?, ?, ?)
   email,
   department,
   hashedPassword,
-  role || "employee"
+  "employee"
 ]    );
 
     // Publish RabbitMQ event
@@ -212,10 +216,12 @@ exports.loginEmployee = async (req, res) => {
       }
     );
 
-    res.status(200).json({
-      success: true,
-      token
-    });
+   res.status(200).json({
+  success: true,
+  token,
+  employeeId: employee.employee_id,
+  role: employee.role
+});
 
   } catch (error) {
     console.error(error);
@@ -230,7 +236,15 @@ exports.loginEmployee = async (req, res) => {
 exports.getEmployee = async (req, res) => {
   try {
     const { employeeId } = req.params;
-
+if (
+  req.user.role === "employee" &&
+  req.user.employeeId !== employeeId
+) {
+  return res.status(403).json({
+    success: false,
+    message: "Access denied"
+  });
+}
     const [employees] = await db.query(
       `
       SELECT employee_id, name, email, department, created_at
@@ -359,6 +373,22 @@ exports.updateEmployee = async (req, res) => {
       });
     }
 
+    const [existingEmail] = await db.query(
+  `
+  SELECT *
+  FROM employees
+  WHERE email = ?
+  AND employee_id != ?
+  `,
+  [email, employeeId]
+);
+
+if (existingEmail.length > 0) {
+  return res.status(400).json({
+    success: false,
+    message: "Email already exists"
+  });
+}
     // Update employee
     await db.query(
       `
@@ -470,5 +500,42 @@ exports.deleteEmployee = async (req, res) => {
       success: false,
       message: "Internal Server Error"
     });
+  }
+};
+
+// Check Employee Exists (Internal API)
+exports.employeeExists = async (req, res) => {
+  try {
+
+    const { employeeId } =
+      req.params;
+
+    const [employees] =
+      await db.query(
+        `
+        SELECT employee_id
+        FROM employees
+        WHERE employee_id = ?
+        `,
+        [employeeId]
+      );
+
+    res.status(200).json({
+      success: true,
+      exists:
+        employees.length > 0
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      exists: false,
+      message:
+        "Internal Server Error"
+    });
+
   }
 };
