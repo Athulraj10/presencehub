@@ -28,14 +28,24 @@ app.use(requestLogger);
 app.use(responseTimer);
 
 app.use(express.json());
-const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => {
+  res.json({
+    message: 'HRMS API Gateway running',
+    endpoints: [
+      '/health',
+      '/employees',
+      '/attendance',
+      '/geofence'
+    ]
+  });
+});
+const PORT = process.env.PORT || 3003;
 
 const EMPLOYEE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:3001';
 const ATTENDANCE_URL = process.env.ATTENDANCE_SERVICE_URL || 'http://localhost:3002';
 const GEOFENCE_URL = process.env.GEOFENCE_SERVICE_URL || 'http://localhost:3003';
 
-app.use(requestId);
-app.use(express.json());
+
 
 
 let activeServiceRegistry = {
@@ -65,50 +75,16 @@ async function trackSystemHealth() {
   setTimeout(trackSystemHealth, 10000);
 }
 
-const validateJwtOnlyIfServiceIsApproved = (targetServiceName) => {
-  return (req, res, next) => {
-    if (!activeServiceRegistry[targetServiceName]) {
-      console.log(`🛑 [Gatekeeper] Blocked request early. ${targetServiceName} is DOWN. Skipping JWT verification.`);
-      return res.status(503).json({
-        error: "Service Unavailable",
-        message: "The requested feature is currently offline. Please try again later."
-      });
-    }
-
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; 
-
-    if (!token) {
-      return res.status(401).json({ error: "Access Denied", message: "Missing security token." });
-    }
-
-    try {
-      console.log("🔒 [Gatekeeper] Service approved and online. JWT validation passed successfully.");
-      next(); 
-    } catch (error) {
-      return res.status(403).json({ error: "Forbidden", message: "Invalid or expired security token." });
-    }
-  };
+const validateJwtOnlyIfServiceIsApproved = (serviceName) => {
+  return protectRoute(
+    serviceName,
+    (service) => activeServiceRegistry[service]
+  );
 };
-
 
 app.use('/employees', employeeRouter(validateJwtOnlyIfServiceIsApproved));
 app.use('/attendance', attendanceRouter(validateJwtOnlyIfServiceIsApproved));
 app.use('/geofence', geofenceRouter());
-
-app.use((err, req, res, next) => {
-
-  console.error(
-    `[${req.requestId}]`,
-    err.stack
-  );
-
-  res.status(500).json({
-    error: 'Internal Server Error',
-    requestId: req.requestId
-  });
-});
-
 
 app.get('/health', (req, res) => {
   res.status(200).json({
@@ -119,10 +95,25 @@ app.get('/health', (req, res) => {
     requestId: req.requestId
   });
 });
+
 app.get('/health/all', (req, res) => {
-  res.status(200).json({ status: "GATEWAY_ACTIVE", liveRegistry: activeServiceRegistry });
+  res.status(200).json({
+    status: 'GATEWAY_ACTIVE',
+    liveRegistry: activeServiceRegistry
+  });
 });
 
+app.use((err, req, res, next) => {
+  console.error(
+    `[${req.requestId}]`,
+    err.stack
+  );
+
+  res.status(500).json({
+    error: 'Internal Server Error',
+    requestId: req.requestId
+  });
+});
 
 async function startGateway() {
   try {
