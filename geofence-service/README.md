@@ -98,40 +98,44 @@ The service uses employee latitude and longitude coordinates to calculate the di
 
 ## Project Structure
 
-```text
-geofence-service/
+presencehub/
 │
-├── config/
-│   ├── db.js
-│   ├── rabbitmq.js
-│   └── healthStatus.js
-│
-├── controllers/
-│   └── geofenceController.js
-│
-├── middleware/
-│   ├── logger.js
-│   ├── errorHandler.js
-│   └── validateGeofenceRequest.js
-│
-├── routes/
-│   └── geofenceRoutes.js
-│
-├── services/
-│   ├── geofenceService.js
-│   └── rabbitmqPublisher.js
-│
-├── test-consumer.js
-│
-├── .env
-├── .gitignore
-├── app.js
-├── package.json
-└── README.md
-```
-
----
-
+└── geofence-service/
+    │
+    ├── config/
+    │   ├── db.js
+    │   ├── rabbitmq.js
+    │   └── healthStatus.js
+    │
+    ├── controllers/
+    │   └── geofenceController.js
+    │
+    ├── middleware/
+    │   ├── logger.js
+    │   ├── errorHandler.js
+    │   └── validateGeofenceRequest.js
+    │
+    ├── routes/
+    │   └── geofenceRoutes.js
+    │
+    ├── services/
+    │   ├── geofenceService.js
+    │   └── rabbitmqPublisher.js
+    │
+    ├── node_modules/
+    │
+    ├── .env
+    ├── .gitignore
+    ├── app.js
+    ├── package.json
+    ├── package-lock.json
+    │
+    ├── test.js
+    ├── test-rabbit.js
+    ├── test-consumer.js
+    │
+    └── README.md
+    
 ## Technologies Used
 
 * Node.js
