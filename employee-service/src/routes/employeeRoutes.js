@@ -12,7 +12,8 @@ const {
   getEmployee,
   getAllEmployees,
   updateEmployee,
-  deleteEmployee
+  deleteEmployee,
+  employeeExists
 } = require("../controllers/employeeController");
 
 router.post("/register", registerEmployee);
@@ -23,6 +24,11 @@ router.get(
   verifyToken,
   checkRole("admin", "hr"),
   getAllEmployees
+);
+
+router.get(
+  "/exists/:employeeId",
+  employeeExists
 );
 
 router.get(
