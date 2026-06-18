@@ -3,7 +3,6 @@ const express = require("express");
 const router = express.Router();
 
 const verifyToken = require("../middleware/authMiddleware");
-
 const checkRole = require("../middleware/roleMiddleware");
 
 const {
@@ -16,7 +15,13 @@ const {
   employeeExists
 } = require("../controllers/employeeController");
 
-router.post("/register", registerEmployee);
+router.post(
+  "/register",
+  verifyToken,
+  checkRole("admin", "hr"),
+  registerEmployee
+);
+
 router.post("/login", loginEmployee);
 
 router.get(
@@ -47,7 +52,7 @@ router.put(
 router.delete(
   "/:employeeId",
   verifyToken,
-  checkRole("admin"),
+  checkRole("admin", "hr"),
   deleteEmployee
 );
 
