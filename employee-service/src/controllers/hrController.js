@@ -217,12 +217,13 @@ if (existingEmail.length > 0) {
 }
     await db.query(
       `
-      UPDATE employees
-      SET
-        name = ?,
-        email = ?,
-        department = ?
-      WHERE employee_id = ?
+     UPDATE employees
+SET
+  name = ?,
+  email = ?,
+  department = ?
+WHERE employee_id = ?
+AND role = 'hr'
       `,
       [
         name,
