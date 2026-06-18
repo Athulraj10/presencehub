@@ -43,6 +43,11 @@ const PORT = process.env.PORT || 3003;
 
 const EMPLOYEE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:3001';
 const ATTENDANCE_URL = process.env.ATTENDANCE_SERVICE_URL || 'http://localhost:3002';
+console.log('EMPLOYEE_SERVICE_URL env =', process.env.EMPLOYEE_SERVICE_URL);
+console.log('ATTENDANCE_SERVICE_URL env =', process.env.ATTENDANCE_SERVICE_URL);
+
+console.log('EMPLOYEE_URL =', EMPLOYEE_URL);
+console.log('ATTENDANCE_URL =', ATTENDANCE_URL);
 const GEOFENCE_URL = process.env.GEOFENCE_SERVICE_URL || 'http://localhost:3003';
 
 
