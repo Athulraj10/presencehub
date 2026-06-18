@@ -4,8 +4,11 @@ require("../utils/publisher");
 const pool =
 require("../config/db");
 
-const validateEmployee =
-  async () => true;
+const {
+  validateEmployee
+} = require(
+  "../services/employeeService"
+);
 
 exports.punchIn =
 async (req, res) => {
