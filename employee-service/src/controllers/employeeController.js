@@ -282,7 +282,8 @@ exports.getAllEmployees = async (req, res) => {
     const [employees] = await db.query(
       `
       SELECT employee_id, name, email, department, created_at
-      FROM employees
+FROM employees
+WHERE role = 'employee'
       `
     );
 
@@ -358,13 +359,14 @@ exports.updateEmployee = async (req, res) => {
 
     // Check employee exists
     const [employees] = await db.query(
-      `
-      SELECT *
-      FROM employees
-      WHERE employee_id = ?
-      `,
-      [employeeId]
-    );
+  `
+  SELECT *
+  FROM employees
+  WHERE employee_id = ?
+  AND role = 'employee'
+  `,
+  [employeeId]
+);
 
     if (employees.length === 0) {
       return res.status(404).json({
@@ -393,11 +395,12 @@ if (existingEmail.length > 0) {
     await db.query(
       `
       UPDATE employees
-      SET
-        name = ?,
-        email = ?,
-        department = ?
-      WHERE employee_id = ?
+SET
+  name = ?,
+  email = ?,
+  department = ?
+WHERE employee_id = ?
+AND role = 'employee'
       `,
       [name, email, department, employeeId]
     );
@@ -441,12 +444,12 @@ exports.deleteEmployee = async (req, res) => {
   try {
     const { employeeId } = req.params;
 
-    // Check employee exists
     const [employees] = await db.query(
       `
       SELECT *
       FROM employees
       WHERE employee_id = ?
+      AND role = 'employee'
       `,
       [employeeId]
     );
@@ -458,16 +461,15 @@ exports.deleteEmployee = async (req, res) => {
       });
     }
 
-    // Delete employee
     await db.query(
       `
       DELETE FROM employees
       WHERE employee_id = ?
+      AND role = 'employee'
       `,
       [employeeId]
     );
 
-    // Publish RabbitMQ event
     const channel = getChannel();
 
     if (channel) {
@@ -476,15 +478,8 @@ exports.deleteEmployee = async (req, res) => {
       channel.sendToQueue(
         "employee.deleted",
         Buffer.from(
-          JSON.stringify({
-            employeeId
-          })
+          JSON.stringify({ employeeId })
         )
-      );
-
-      console.log(
-        "Published employee.deleted:",
-        employeeId
       );
     }
 
@@ -503,39 +498,32 @@ exports.deleteEmployee = async (req, res) => {
   }
 };
 
-// Check Employee Exists (Internal API)
+// Check Employee Exists
 exports.employeeExists = async (req, res) => {
   try {
+    const { employeeId } = req.params;
 
-    const { employeeId } =
-      req.params;
-
-    const [employees] =
-      await db.query(
-        `
-        SELECT employee_id
-        FROM employees
-        WHERE employee_id = ?
-        `,
-        [employeeId]
-      );
+    const [employees] = await db.query(
+      `
+      SELECT employee_id
+      FROM employees
+      WHERE employee_id = ?
+      `,
+      [employeeId]
+    );
 
     res.status(200).json({
       success: true,
-      exists:
-        employees.length > 0
+      exists: employees.length > 0
     });
 
   } catch (error) {
-
     console.error(error);
 
     res.status(500).json({
       success: false,
       exists: false,
-      message:
-        "Internal Server Error"
+      message: "Internal Server Error"
     });
-
   }
 };
