@@ -4,13 +4,15 @@ const router = express.Router();
 
 const EMPLOYEE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:3001';
 
+console.log("EMPLOYEE_URL =", EMPLOYEE_URL);
+
 module.exports = (validateJwtOnlyIfServiceIsApproved) => {
     
 router.use(
     '/exists',
     proxy(EMPLOYEE_URL, {
         proxyReqPathResolver: (req) =>
-            `/employees${req.url}`
+            `/employees/exists${req.url}`
     })
 );
     router.use(
@@ -23,3 +25,12 @@ router.use(
 
     return router;
 };
+
+
+
+
+
+
+
+
+
