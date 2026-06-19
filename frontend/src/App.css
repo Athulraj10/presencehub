@@ -1,0 +1,24 @@
+.container {
+  max-width: 400px;
+  margin: 100px auto;
+  text-align: center;
+}
+
+input {
+  display: block;
+  width: 100%;
+  margin: 10px 0;
+  padding: 10px;
+}
+
+button {
+  margin: 10px;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+
+
+
+
+
