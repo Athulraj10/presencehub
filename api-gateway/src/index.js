@@ -7,6 +7,7 @@ require('dotenv').config({ path: path.resolve(process.cwd(), 'api-gateway/.env')
 
 
 const express = require('express');
+const cors = require('cors');
 const axios = require('axios');
 const amqp = require('amqplib');
 const mysql = require('mysql2/promise'); 
@@ -23,6 +24,10 @@ const attendanceRouter = require('./routes/attendanceRoutes');
 const geofenceRouter = require('./routes/geofenceRoutes');
 
 const app = express();
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
 app.use(requestId);
 app.use(requestLogger);
 app.use(responseTimer);

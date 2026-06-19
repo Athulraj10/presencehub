@@ -2,30 +2,48 @@ const express = require('express');
 const proxy = require('express-http-proxy');
 const router = express.Router();
 
-const EMPLOYEE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:3001';
+const EMPLOYEE_URL =
+  process.env.EMPLOYEE_SERVICE_URL ||
+  'http://localhost:3001';
 
 console.log("EMPLOYEE_URL =", EMPLOYEE_URL);
 
-module.exports = (validateJwtOnlyIfServiceIsApproved) => {
-    
-router.use(
+module.exports = (
+  validateJwtOnlyIfServiceIsApproved
+) => {
+
+  // Public Login Route
+  router.use(
+    '/login',
+    proxy(EMPLOYEE_URL, {
+      proxyReqPathResolver: () =>
+        '/employees/login'
+    })
+  );
+
+  // Public Employee Exists Route
+  router.use(
     '/exists',
     proxy(EMPLOYEE_URL, {
-        proxyReqPathResolver: (req) =>
-            `/employees/exists${req.url}`
+      proxyReqPathResolver: (req) =>
+        `/employees/exists${req.url}`
     })
-);
-    router.use(
-        '/',
-        validateJwtOnlyIfServiceIsApproved('employee-service'),
-        proxy(EMPLOYEE_URL, {
-            proxyReqPathResolver: (req) => `/employees${req.url}`
-        })
-    );
+  );
 
-    return router;
+  // Protected Routes
+  router.use(
+    '/',
+    validateJwtOnlyIfServiceIsApproved(
+      'employee-service'
+    ),
+    proxy(EMPLOYEE_URL, {
+      proxyReqPathResolver: (req) =>
+        `/employees${req.url}`
+    })
+  );
+
+  return router;
 };
-
 
 
 
