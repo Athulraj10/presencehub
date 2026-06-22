@@ -1,8 +1,11 @@
 import { useState } from "react";
 import api from "../services/api";
 
-function Login({ onLogin }) {
-  const [email, setEmail] = useState("");
+function Login({
+  onLogin,
+  onForgotPassword
+}) {
+    const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
@@ -58,6 +61,16 @@ function Login({ onLogin }) {
       <button onClick={handleLogin}>
         Login
       </button>
+
+      <p
+  style={{
+    color: "blue",
+    cursor: "pointer",
+    marginTop: "10px"
+  }}
+onClick={onForgotPassword}>
+  Forgot Password?
+</p>
     </div>
   );
 }

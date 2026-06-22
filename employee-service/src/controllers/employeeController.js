@@ -159,6 +159,62 @@ VALUES (?, ?, ?, ?, ?, ?)
     });
   }
 };
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and new password are required"
+      });
+    }
+
+    if (newPassword.length < 8) {
+  return res.status(400).json({
+    success: false,
+    message: "Password must be at least 8 characters"
+  });
+}
+
+    const [employees] = await db.query(
+      "SELECT * FROM employees WHERE email = ?",
+      [email]
+    );
+
+    if (employees.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      10
+    );
+
+    await db.query(
+      "UPDATE employees SET password = ? WHERE email = ?",
+      [hashedPassword, email]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully"
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
+  }
+  
+};
+
 // Login Employee
 exports.loginEmployee = async (req, res) => {
   try {
