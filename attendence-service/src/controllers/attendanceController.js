@@ -10,6 +10,14 @@ const {
   "../services/employeeService"
 );
 
+// Convert timestamp to IST date string
+const toISTDateString = (timestamp) => {
+  const date = new Date(timestamp);
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(date.getTime() + istOffset);
+  return istDate.toISOString().split("T")[0];
+};
+
 exports.punchIn =
 async (req, res) => {
 
@@ -61,7 +69,6 @@ try {
 
   }
 
-  /*
   const employeeExists =
     await validateEmployee(
       employeeId
@@ -76,10 +83,9 @@ try {
     });
 
   }
-  */
 
   const attendanceDate =
-    timestamp.split(" ")[0];
+    toISTDateString(timestamp);
 
   const officeStartTime =
     new Date(
@@ -216,7 +222,6 @@ try {
 
   }
 
-  /*
   const employeeExists =
     await validateEmployee(
       employeeId
@@ -231,10 +236,9 @@ try {
     });
 
   }
-  */
 
   const attendanceDate =
-    timestamp.split(" ")[0];
+    toISTDateString(timestamp);
 
   const [attendanceRecord] =
     await pool.query(
@@ -283,8 +287,7 @@ try {
     new Date(timestamp);
 
   if (
-    punchOutTime <
-    punchInTime
+    punchOutTime < punchInTime
   ) {
 
     return res.status(400).json({
@@ -320,7 +323,6 @@ try {
     punchOutTime.getHours()
     < officeEndHour;
 
-  
   await pool.query(
     `
     UPDATE attendance
@@ -751,7 +753,3 @@ try {
 
 
 };
-
-
-
-

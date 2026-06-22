@@ -1,11 +1,8 @@
 import api from "../services/api";
 
-function Dashboard() {
-  const employeeId =
-    localStorage.getItem("employeeId");
-
-  const token =
-    localStorage.getItem("token");
+function Dashboard({ role }) {
+  const employeeId = localStorage.getItem("employeeId");
+  const token = localStorage.getItem("token");
 
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -61,6 +58,7 @@ function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("employeeId");
+    localStorage.removeItem("role");
 
     alert("Logged Out Successfully");
 
@@ -72,7 +70,7 @@ function Dashboard() {
       <h1>PresenceHub Dashboard</h1>
 
       <h2>
-        Employee: {employeeId}
+        Employee: {employeeId} ({role})
       </h2>
 
       <button onClick={handlePunchIn}>
@@ -83,6 +81,14 @@ function Dashboard() {
         Punch Out
       </button>
 
+      {(role === "hr" || role === "admin") && (
+        <>
+          <hr />
+          <h3>HR Actions</h3>
+          {/* HR-only buttons go here later */}
+        </>
+      )}
+
       <button onClick={handleLogout}>
         Logout
       </button>
@@ -91,14 +97,3 @@ function Dashboard() {
 }
 
 export default Dashboard;
-
-
-
-
-
-
-
-
-
-
-

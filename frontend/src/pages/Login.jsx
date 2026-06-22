@@ -15,19 +15,13 @@ function Login({
         password,
       });
 
-      localStorage.setItem(
-        "token",
-        response.data.token
-      );
-
-      localStorage.setItem(
-        "employeeId",
-        response.data.employeeId
-      );
+      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("employeeId", response.data.employeeId);
+      localStorage.setItem("role", response.data.role);
 
       alert("Login Successful");
 
-      onLogin();
+      onLogin(response.data.role);
     } catch (error) {
       alert(
         error.response?.data?.message ||
@@ -76,12 +70,3 @@ onClick={onForgotPassword}>
 }
 
 export default Login;
-
-
-
-
-
-
-
-
-

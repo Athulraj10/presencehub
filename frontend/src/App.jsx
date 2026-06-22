@@ -1,25 +1,29 @@
 import { useState } from "react";
-
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ForgotPassword from "./pages/ForgotPassword";
 
 function App() {
-  const [loggedIn, setLoggedIn] =
-    useState(
-      !!localStorage.getItem("token")
-    );
+  const [loggedIn, setLoggedIn] = useState(
+    !!localStorage.getItem("token")
+  );
 
-  const [showForgotPassword,
-    setShowForgotPassword] =
+  const [role, setRole] = useState(
+    localStorage.getItem("role") || ""
+  );
+
+  const [showForgotPassword, setShowForgotPassword] =
     useState(false);
+
+  const handleLogin = (userRole) => {
+    setRole(userRole);
+    setLoggedIn(true);
+  };
 
   if (showForgotPassword) {
     return (
       <ForgotPassword
-        goBack={() =>
-          setShowForgotPassword(false)
-        }
+        goBack={() => setShowForgotPassword(false)}
       />
     );
   }
@@ -27,12 +31,10 @@ function App() {
   return (
     <>
       {loggedIn ? (
-        <Dashboard />
+        <Dashboard role={role} />
       ) : (
         <Login
-          onLogin={() =>
-            setLoggedIn(true)
-          }
+          onLogin={handleLogin}
           onForgotPassword={() =>
             setShowForgotPassword(true)
           }
