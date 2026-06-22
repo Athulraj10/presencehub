@@ -15,6 +15,16 @@ const {
   employeeExists
 } = require("../controllers/employeeController");
 
+
+const {
+  forgotPassword
+} = require("../controllers/employeeController");
+
+router.post(
+  "/forgot-password",
+  forgotPassword
+);
+
 router.post(
   "/register",
   verifyToken,
