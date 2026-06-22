@@ -32,7 +32,16 @@ app.use(requestId);
 app.use(requestLogger);
 app.use(responseTimer);
 
-app.use(express.json());
+// Capture raw request body for debugging (keeps parsing behavior)
+app.use(express.json({
+  verify: (req, res, buf, encoding) => {
+    try {
+      req.rawBody = buf.toString(encoding || 'utf8');
+    } catch (e) {
+      req.rawBody = '';
+    }
+  }
+}));
 app.get('/', (req, res) => {
   res.json({
     message: 'HRMS API Gateway running',
@@ -129,40 +138,65 @@ async function startGateway() {
   try {
     console.log("📂 Visual Studio working directory location:", process.cwd());
 
-    
+    // Try connecting to DB but don't fail startup if it's not reachable
     console.log('Connecting to Railway MySQL Database...');
-    const connection = await mysql.createConnection({
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT, 10),
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME
-    });
-    await connection.ping();
-    await connection.end();
-    console.log('✅ Gateway successfully connected to Railway MySQL!');
+    let dbConnected = false;
+    try {
+      const connection = await mysql.createConnection({
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_PORT, 10),
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME
+      });
+      await connection.ping();
+      await connection.end();
+      dbConnected = true;
+      console.log('✅ Gateway successfully connected to Railway MySQL!');
+    } catch (dbErr) {
+      console.warn('⚠️ Could not connect to MySQL:', dbErr.message);
+    }
 
-    
+    // Try connecting to RabbitMQ but continue if it's unavailable
     console.log('Connecting to CloudAMQP RabbitMQ broker...');
     const rabbitUrl = process.env.RABBITMQ_URL;
+    let rabbitConnected = false;
     if (!rabbitUrl) {
-      throw new Error("Missing RABBITMQ_URL configuration in your .env file!");
+      console.warn('⚠️ Missing RABBITMQ_URL configuration in your .env file.');
+    } else {
+      try {
+        const conn = await amqp.connect(rabbitUrl);
+        await conn.createChannel();
+        rabbitConnected = true;
+        console.log('✅ Gateway successfully connected to Cloud RabbitMQ!');
+      } catch (rmqErr) {
+        console.warn('⚠️ Could not connect to RabbitMQ:', rmqErr.message);
+      }
     }
-    const conn = await amqp.connect(rabbitUrl);
-    await conn.createChannel();
-    console.log('✅ Gateway successfully connected to Cloud RabbitMQ!');
 
-    
+    // Start health tracking even if external systems are unavailable.
     trackSystemHealth();
 
-    
     app.listen(PORT, () => {
-      console.log(`🚀 Secure API Gateway operating smoothly on http://localhost:${PORT}`);
+      console.log(`🚀 Secure API Gateway operating on http://localhost:${PORT}`);
+      if (!dbConnected || !rabbitConnected) {
+        console.log('⚠️ Gateway started in degraded mode. External dependencies are not fully available.');
+      }
     });
 
   } catch (error) {
-    console.error('❌ Failed to boot up API Gateway:', error.message);
-    process.exit(1);
+    console.error('❌ Unexpected error while starting API Gateway:', error.message);
+    // Do not exit the process — attempt to start server in degraded mode.
+    try {
+      trackSystemHealth();
+      app.listen(PORT, () => {
+        console.log(`🚀 Secure API Gateway operating on http://localhost:${PORT}`);
+        console.log('⚠️ Gateway started after unexpected error; some features may be limited.');
+      });
+    } catch (e) {
+      console.error('❌ Failed to start HTTP server after error:', e.message);
+      process.exit(1);
+    }
   }
 }
 
