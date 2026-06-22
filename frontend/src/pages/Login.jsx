@@ -12,19 +12,13 @@ function Login({ onLogin }) {
         password,
       });
 
-      localStorage.setItem(
-        "token",
-        response.data.token
-      );
-
-      localStorage.setItem(
-        "employeeId",
-        response.data.employeeId
-      );
+      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("employeeId", response.data.employeeId);
+      localStorage.setItem("role", response.data.role);
 
       alert("Login Successful");
 
-      onLogin();
+      onLogin(response.data.role);
     } catch (error) {
       alert(
         error.response?.data?.message ||
@@ -63,12 +57,3 @@ function Login({ onLogin }) {
 }
 
 export default Login;
-
-
-
-
-
-
-
-
-
