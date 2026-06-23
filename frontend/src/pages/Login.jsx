@@ -19,7 +19,8 @@ function Login({ onLogin, onForgotPassword }) {
       localStorage.setItem("role", response.data.role);
 
       alert("Login Successful");
-      onLogin();
+
+      onLogin(response.data.role);
     } catch (error) {
       alert(error.response?.data?.message || "Login Failed");
     }
