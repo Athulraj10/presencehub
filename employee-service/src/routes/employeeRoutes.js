@@ -27,8 +27,6 @@ router.post(
 
 router.post(
   "/register",
-  verifyToken,
-  checkRole("admin", "hr"),
   registerEmployee
 );
 

@@ -218,24 +218,25 @@ exports.forgotPassword = async (req, res) => {
 // Login Employee
 exports.loginEmployee = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const identifier = req.body.identifier || req.body.email;
+    const { password } = req.body;
 
     // Validation
-    if (!email || !password) {
+    if (!identifier || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required"
+        message: "Employee ID or email and password are required"
       });
     }
 
-    // Find employee
+    // Find employee by email or employee ID
     const [employees] = await db.query(
       `
       SELECT *
       FROM employees
-      WHERE email = ?
+      WHERE email = ? OR employee_id = ?
       `,
-      [email]
+      [identifier, identifier]
     );
 
     if (employees.length === 0) {
