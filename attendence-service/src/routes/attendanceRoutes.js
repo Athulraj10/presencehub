@@ -42,6 +42,11 @@ attendanceController.getDashboard
 );
 
 router.get(
+"/alerts/:employeeId",
+attendanceController.getAlerts
+);
+
+router.get(
 "/late/:employeeId",
 attendanceController.getLateAttendanceCount
 );
@@ -52,6 +57,7 @@ attendanceController.getAttendanceHistory
 );
 
 module.exports = router;
+
 
 
 
