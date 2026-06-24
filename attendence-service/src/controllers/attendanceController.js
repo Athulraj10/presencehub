@@ -10,6 +10,31 @@ const {
   "../services/employeeService"
 );
 
+const parseUTC = (ts) => {
+  if (!ts) return new Date();
+  if (ts.includes("T") || ts.endsWith("Z")) return new Date(ts);
+  return new Date(ts.replace(" ", "T") + "Z");
+};
+
+const getLocalDateString = (date) => {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+};
+
+const getLocalHour = (date) => {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      hour12: false
+    }).format(date)
+  );
+};
+
 exports.punchIn =
 async (req, res) => {
 
@@ -34,9 +59,10 @@ try {
 
   }
 
+  const parsedTimestamp = parseUTC(timestamp);
   if (
     isNaN(
-      new Date(timestamp)
+      parsedTimestamp.getTime()
     )
   ) {
 
@@ -49,8 +75,8 @@ try {
   }
 
   if (
-    new Date(timestamp) >
-    new Date()
+    parsedTimestamp >
+    new Date(Date.now() + 5 * 60 * 1000)
   ) {
 
     return res.status(400).json({
@@ -79,16 +105,16 @@ try {
   */
 
   const attendanceDate =
-    timestamp.split(" ")[0];
+    getLocalDateString(parsedTimestamp);
 
   const officeStartTime =
     new Date(
       attendanceDate +
-      " 09:00:00"
+      "T09:00:00+05:30"
     );
 
   const isLate =
-    new Date(timestamp) >
+    parsedTimestamp >
     officeStartTime;
 
   const [existingAttendance] =
@@ -189,9 +215,10 @@ try {
 
   }
 
+  const parsedTimestamp = parseUTC(timestamp);
   if (
     isNaN(
-      new Date(timestamp)
+      parsedTimestamp.getTime()
     )
   ) {
 
@@ -204,8 +231,8 @@ try {
   }
 
   if (
-    new Date(timestamp) >
-    new Date()
+    parsedTimestamp >
+    new Date(Date.now() + 5 * 60 * 1000)
   ) {
 
     return res.status(400).json({
@@ -234,7 +261,7 @@ try {
   */
 
   const attendanceDate =
-    timestamp.split(" ")[0];
+    getLocalDateString(parsedTimestamp);
 
   const [attendanceRecord] =
     await pool.query(
@@ -280,7 +307,7 @@ try {
     );
 
   const punchOutTime =
-    new Date(timestamp);
+    parsedTimestamp;
 
   if (
     punchOutTime <
@@ -317,7 +344,7 @@ try {
   const officeEndHour = 18;
 
   const earlyDeparture =
-    punchOutTime.getHours()
+    getLocalHour(punchOutTime)
     < officeEndHour;
 
   
@@ -652,11 +679,19 @@ try {
     employeeId
   } = req.params;
 
+  // 1. Fetch employee name from database
+  const [employee] = await pool.query(
+    "SELECT name FROM employees WHERE employee_id = ?",
+    [employeeId]
+  );
+  const employeeName = employee.length > 0 ? employee[0].name : "Employee";
+
+  // 2. Fetch statistics
   const [rows] =
     await pool.query(
       `
       SELECT
-        COUNT(*) AS totalDays,
+        COUNT(*) AS presentDays,
 
         SUM(
           CASE
@@ -690,9 +725,62 @@ try {
       [employeeId]
     );
 
+  const stats = rows[0] || {};
+  const presentDays = stats.presentDays || 0;
+  const totalDays = 22; // default denominator in frontend Dashboard.jsx
+  const absentDays = Math.max(0, totalDays - presentDays);
+  const totalHours = Number(stats.totalHours) || 0;
+  const attendancePercentage = totalDays > 0 ? Math.min(100, Math.round((presentDays / totalDays) * 100)) : 0;
+
+  // 3. Check if checked in today
+  const todayDate = getLocalDateString(new Date());
+
+  const [currentSession] = await pool.query(
+    `
+    SELECT *
+    FROM attendance
+    WHERE employee_id = ?
+    AND attendance_date = ?
+    `,
+    [employeeId, todayDate]
+  );
+
+  const isCheckedIn = currentSession.length > 0 && currentSession[0].punch_out === null;
+
+  // 4. Calculate live duration for active session
+  let activeDuration = "00:00:00";
+  if (isCheckedIn && currentSession[0].punch_in) {
+    const punchInTime = new Date(currentSession[0].punch_in);
+    const now = new Date();
+    const diffMs = now - punchInTime;
+    if (diffMs > 0) {
+      const diffSecs = Math.floor(diffMs / 1000);
+      const secs = diffSecs % 60;
+      const mins = Math.floor(diffSecs / 60) % 60;
+      const hrs = Math.floor(diffSecs / 3600);
+      activeDuration = [
+        String(hrs).padStart(2, "0"),
+        String(mins).padStart(2, "0"),
+        String(secs).padStart(2, "0")
+      ].join(":");
+    }
+  }
+
   res.json({
     success: true,
-    data: rows[0]
+    data: {
+      employeeName,
+      presentDays,
+      totalDays,
+      absentDays,
+      totalHours,
+      attendancePercentage,
+      isCheckedIn,
+      activeDuration,
+      lateDays: stats.lateDays || 0,
+      overtimeHours: stats.overtimeHours || 0,
+      earlyDepartureDays: stats.earlyDepartureDays || 0
+    }
   });
 
 } catch (error) {
@@ -708,6 +796,45 @@ try {
 }
 
 
+};
+
+exports.getAlerts = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const [rows] = await pool.query(
+      `
+      SELECT COUNT(*) AS lateDays
+      FROM attendance
+      WHERE employee_id = ?
+      AND is_late = TRUE
+      `,
+      [employeeId]
+    );
+
+    const lateDays = rows[0]?.lateDays || 0;
+    const alerts = [];
+
+    if (lateDays > 0) {
+      alerts.push({
+        type: "warning",
+        title: "Late Attendance Warning",
+        description: `You have been late ${lateDays} times this period. Please adhere to office hours (09:00 AM).`,
+        date: getLocalDateString(new Date())
+      });
+    }
+
+    res.json({
+      success: true,
+      alerts
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
 
 exports.getLateAttendanceCount =
