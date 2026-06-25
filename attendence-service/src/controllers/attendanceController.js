@@ -10,7 +10,8 @@ const {
   "../services/employeeService"
 );
 
-// Convert timestamp to IST date string
+const geolib = require("geolib");
+
 const toISTDateString = (timestamp) => {
   const date = new Date(timestamp);
   const istOffset = 5.5 * 60 * 60 * 1000;
@@ -18,15 +19,49 @@ const toISTDateString = (timestamp) => {
   return istDate.toISOString().split("T")[0];
 };
 
+const parseUTC = (timestamp) => {
+  return new Date(timestamp);
+};
+
+const getLocalDateString = (date) => {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+};
+
+const getLocalHour = (date) => {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      hour12: false
+    }).format(date)
+  );
+};
+
+const getOfficeGeofence = async () => {
+  const [results] = await pool.query(
+    "SELECT * FROM geofences LIMIT 1"
+  );
+  if (results.length === 0) {
+    throw new Error("No geofence configured");
+  }
+  return results[0];
+};
+
 exports.punchIn =
 async (req, res) => {
-
 
 try {
 
   const {
     employeeId,
-    timestamp
+    timestamp,
+    latitude,
+    longitude
   } = req.body;
 
   if (
@@ -42,9 +77,10 @@ try {
 
   }
 
+  const parsedTimestamp = parseUTC(timestamp);
   if (
     isNaN(
-      new Date(timestamp)
+      parsedTimestamp.getTime()
     )
   ) {
 
@@ -57,8 +93,8 @@ try {
   }
 
   if (
-    new Date(timestamp) >
-    new Date()
+    parsedTimestamp >
+    new Date(Date.now() + 5 * 60 * 1000)
   ) {
 
     return res.status(400).json({
@@ -84,17 +120,50 @@ try {
 
   }
 
+  if (
+    latitude !== undefined &&
+    longitude !== undefined
+  ) {
+
+    const geofence =
+      await getOfficeGeofence();
+
+    const isInsideGeofence =
+      geolib.isPointWithinRadius(
+        {
+          latitude,
+          longitude
+        },
+        {
+          latitude: Number(geofence.latitude),
+          longitude: Number(geofence.longitude)
+        },
+        Number(geofence.radius)
+      );
+
+    if (!isInsideGeofence) {
+
+      return res.status(403).json({
+        success: false,
+        message:
+          `You are outside ${geofence.office_name}. Punch In not allowed.`
+      });
+
+    }
+
+  }
+
   const attendanceDate =
-    toISTDateString(timestamp);
+    getLocalDateString(parsedTimestamp);
 
   const officeStartTime =
     new Date(
       attendanceDate +
-      " 09:00:00"
+      "T09:00:00+05:30"
     );
 
   const isLate =
-    new Date(timestamp) >
+    parsedTimestamp >
     officeStartTime;
 
   const [existingAttendance] =
@@ -130,23 +199,33 @@ try {
       employee_id,
       punch_in,
       attendance_date,
-      is_late
+      is_late,
+      punch_in_lat,
+      punch_in_lng
     )
-    VALUES (?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?)
     `,
     [
       employeeId,
       timestamp,
       attendanceDate,
-      isLate
+      isLate,
+      latitude ?? null,
+      longitude ?? null
     ]
+  );
+
+  console.log(
+    `[${new Date().toISOString()}] [INFO] [attendance-service] Punch In recorded | employeeId=${employeeId} | lat=${latitude} | lng=${longitude} | isLate=${isLate}`
   );
 
   await publishEvent(
     "attendance.punchin",
     {
       employeeId,
-      timestamp
+      timestamp,
+      latitude,
+      longitude
     }
   );
 
@@ -168,18 +247,18 @@ try {
 
 }
 
-
 };
 
 exports.punchOut =
 async (req, res) => {
 
-
 try {
 
   const {
     employeeId,
-    timestamp
+    timestamp,
+    latitude,
+    longitude
   } = req.body;
 
   if (
@@ -195,9 +274,10 @@ try {
 
   }
 
+  const parsedTimestamp = parseUTC(timestamp);
   if (
     isNaN(
-      new Date(timestamp)
+      parsedTimestamp.getTime()
     )
   ) {
 
@@ -210,8 +290,8 @@ try {
   }
 
   if (
-    new Date(timestamp) >
-    new Date()
+    parsedTimestamp >
+    new Date(Date.now() + 5 * 60 * 1000)
   ) {
 
     return res.status(400).json({
@@ -237,8 +317,41 @@ try {
 
   }
 
+  if (
+    latitude !== undefined &&
+    longitude !== undefined
+  ) {
+
+    const geofence =
+      await getOfficeGeofence();
+
+    const isInsideGeofence =
+      geolib.isPointWithinRadius(
+        {
+          latitude,
+          longitude
+        },
+        {
+          latitude: Number(geofence.latitude),
+          longitude: Number(geofence.longitude)
+        },
+        Number(geofence.radius)
+      );
+
+    if (!isInsideGeofence) {
+
+      return res.status(403).json({
+        success: false,
+        message:
+          `You are outside ${geofence.office_name}. Punch Out not allowed.`
+      });
+
+    }
+
+  }
+
   const attendanceDate =
-    toISTDateString(timestamp);
+    getLocalDateString(parsedTimestamp);
 
   const [attendanceRecord] =
     await pool.query(
@@ -284,7 +397,7 @@ try {
     );
 
   const punchOutTime =
-    new Date(timestamp);
+    parsedTimestamp;
 
   if (
     punchOutTime < punchInTime
@@ -320,7 +433,7 @@ try {
   const officeEndHour = 18;
 
   const earlyDeparture =
-    punchOutTime.getHours()
+    getLocalHour(punchOutTime)
     < officeEndHour;
 
   await pool.query(
@@ -330,7 +443,9 @@ try {
       punch_out = ?,
       working_hours = ?,
       overtime_hours = ?,
-      early_departure = ?
+      early_departure = ?,
+      punch_out_lat = ?,
+      punch_out_lng = ?
     WHERE employee_id = ?
     AND attendance_date = ?
     `,
@@ -339,9 +454,15 @@ try {
       workingHours,
       overtimeHours,
       earlyDeparture,
+      latitude ?? null,
+      longitude ?? null,
       employeeId,
       attendanceDate
     ]
+  );
+
+  console.log(
+    `[${new Date().toISOString()}] [INFO] [attendance-service] Punch Out recorded | employeeId=${employeeId} | lat=${latitude} | lng=${longitude} | workingHours=${workingHours}`
   );
 
   await publishEvent(
@@ -350,7 +471,9 @@ try {
       employeeId,
       timestamp,
       workingHours,
-      overtimeHours
+      overtimeHours,
+      latitude,
+      longitude
     }
   );
 
@@ -375,12 +498,10 @@ try {
 
 }
 
-
 };
 
 exports.getAttendanceHistory =
 async (req, res) => {
-
 
 try {
 
@@ -437,12 +558,10 @@ try {
 
 }
 
-
 };
 
 exports.getAttendanceByDate =
 async (req, res) => {
-
 
 try {
 
@@ -476,12 +595,10 @@ try {
 
 }
 
-
 };
 
 exports.getMonthlyAttendance =
 async (req, res) => {
-
 
 try {
 
@@ -521,12 +638,10 @@ try {
 
 }
 
-
 };
 
 exports.getAttendanceSummary =
 async (req, res) => {
-
 
 try {
 
@@ -576,12 +691,10 @@ try {
 
 }
 
-
 };
 
 exports.getAttendanceReport =
 async (req, res) => {
-
 
 try {
 
@@ -641,12 +754,10 @@ try {
 
 }
 
-
 };
 
 exports.getDashboard =
 async (req, res) => {
-
 
 try {
 
@@ -654,11 +765,20 @@ try {
     employeeId
   } = req.params;
 
+  const [employee] = await pool.query(
+    "SELECT name FROM employees WHERE employee_id = ?",
+    [employeeId]
+  );
+  const employeeName =
+    employee.length > 0
+      ? employee[0].name
+      : "Employee";
+
   const [rows] =
     await pool.query(
       `
       SELECT
-        COUNT(*) AS totalDays,
+        COUNT(*) AS presentDays,
 
         SUM(
           CASE
@@ -692,9 +812,65 @@ try {
       [employeeId]
     );
 
+  const stats = rows[0] || {};
+  const presentDays = stats.presentDays || 0;
+  const totalDays = 22;
+  const absentDays = Math.max(0, totalDays - presentDays);
+  const totalHours = Number(stats.totalHours) || 0;
+  const attendancePercentage =
+    totalDays > 0
+      ? Math.min(100, Math.round((presentDays / totalDays) * 100))
+      : 0;
+
+  const todayDate = getLocalDateString(new Date());
+
+  const [currentSession] = await pool.query(
+    `
+    SELECT *
+    FROM attendance
+    WHERE employee_id = ?
+    AND attendance_date = ?
+    `,
+    [employeeId, todayDate]
+  );
+
+  const isCheckedIn =
+    currentSession.length > 0 &&
+    currentSession[0].punch_out === null;
+
+  let activeDuration = "00:00:00";
+  if (isCheckedIn && currentSession[0].punch_in) {
+    const punchInTime = new Date(currentSession[0].punch_in);
+    const now = new Date();
+    const diffMs = now - punchInTime;
+    if (diffMs > 0) {
+      const diffSecs = Math.floor(diffMs / 1000);
+      const secs = diffSecs % 60;
+      const mins = Math.floor(diffSecs / 60) % 60;
+      const hrs = Math.floor(diffSecs / 3600);
+      activeDuration = [
+        String(hrs).padStart(2, "0"),
+        String(mins).padStart(2, "0"),
+        String(secs).padStart(2, "0")
+      ].join(":");
+    }
+  }
+
   res.json({
     success: true,
-    data: rows[0]
+    data: {
+      employeeName,
+      presentDays,
+      totalDays,
+      absentDays,
+      totalHours,
+      attendancePercentage,
+      isCheckedIn,
+      activeDuration,
+      lateDays: stats.lateDays || 0,
+      overtimeHours: stats.overtimeHours || 0,
+      earlyDepartureDays: stats.earlyDepartureDays || 0
+    }
   });
 
 } catch (error) {
@@ -709,12 +885,49 @@ try {
 
 }
 
+};
 
+exports.getAlerts = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const [rows] = await pool.query(
+      `
+      SELECT COUNT(*) AS lateDays
+      FROM attendance
+      WHERE employee_id = ?
+      AND is_late = TRUE
+      `,
+      [employeeId]
+    );
+
+    const lateDays = rows[0]?.lateDays || 0;
+    const alerts = [];
+
+    if (lateDays > 0) {
+      alerts.push({
+        type: "warning",
+        title: "Late Attendance Warning",
+        description: `You have been late ${lateDays} times this period. Please adhere to office hours (09:00 AM).`,
+        date: getLocalDateString(new Date())
+      });
+    }
+
+    res.json({
+      success: true,
+      alerts
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
 
 exports.getLateAttendanceCount =
 async (req, res) => {
-
 
 try {
 
@@ -750,6 +963,5 @@ try {
   });
 
 }
-
 
 };
