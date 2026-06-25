@@ -879,6 +879,100 @@ try {
 
 };
 
+exports.updateAttendance = async (req, res) => {
+  try {
+    const { employeeId, date, punchIn, punchOut, status } = req.body;
+    
+    // Get existing record
+    const [existing] = await pool.query(
+      `SELECT * FROM attendance WHERE employee_id = ? AND attendance_date = ?`,
+      [employeeId, date]
+    );
+
+    if (status === "Absent") {
+      if (existing.length > 0) {
+        await pool.query(
+          `DELETE FROM attendance WHERE employee_id = ? AND attendance_date = ?`,
+          [employeeId, date]
+        );
+      }
+      return res.json({ success: true, message: "Attendance updated to Absent" });
+    }
+
+    // Determine values for checkin and checkout
+    let formattedPunchIn = null;
+    let formattedPunchOut = null;
+    
+    const getFormattedDateTime = (timeStr) => {
+      if (!timeStr || timeStr === "--:-- --" || timeStr === "—") return null;
+      if (timeStr.includes("T") || (timeStr.includes("-") && timeStr.includes(":"))) {
+        return timeStr.replace("T", " ").substring(0, 19);
+      }
+      
+      let hours = 0;
+      let minutes = 0;
+      
+      const cleanTime = timeStr.trim();
+      if (cleanTime.toLowerCase().includes("am") || cleanTime.toLowerCase().includes("pm")) {
+        const parts = cleanTime.split(/\s+/);
+        const timeParts = parts[0].split(":");
+        hours = parseInt(timeParts[0]);
+        minutes = parseInt(timeParts[1] || 0);
+        const ampm = parts[1].toLowerCase();
+        if (ampm === "pm" && hours < 12) hours += 12;
+        if (ampm === "am" && hours === 12) hours = 0;
+      } else {
+        const timeParts = cleanTime.split(":");
+        hours = parseInt(timeParts[0]);
+        minutes = parseInt(timeParts[1] || 0);
+      }
+      
+      const dateObj = new Date(`${date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30`);
+      if (isNaN(dateObj.getTime())) return null;
+
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      const hh = String(dateObj.getHours()).padStart(2, '0');
+      const mm = String(dateObj.getMinutes()).padStart(2, '0');
+      const ss = String(dateObj.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hh}:${mm}:${ss}`;
+    };
+
+    if (punchIn) formattedPunchIn = getFormattedDateTime(punchIn);
+    if (punchOut) formattedPunchOut = getFormattedDateTime(punchOut);
+
+    let workingHours = 0;
+    if (formattedPunchIn && formattedPunchOut) {
+      const pin = new Date(formattedPunchIn.replace(" ", "T") + "+05:30");
+      const pout = new Date(formattedPunchOut.replace(" ", "T") + "+05:30");
+      if (!isNaN(pin.getTime()) && !isNaN(pout.getTime())) {
+        workingHours = ((pout - pin) / (1000 * 60 * 60)).toFixed(2);
+      }
+    }
+
+    if (existing.length > 0) {
+      await pool.query(
+        `UPDATE attendance
+         SET punch_in = ?, punch_out = ?, working_hours = ?
+         WHERE employee_id = ? AND attendance_date = ?`,
+        [formattedPunchIn, formattedPunchOut, workingHours, employeeId, date]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO attendance (employee_id, punch_in, punch_out, working_hours, attendance_date)
+         VALUES (?, ?, ?, ?, ?)`,
+        [employeeId, formattedPunchIn, formattedPunchOut, workingHours, date]
+      );
+    }
+
+    res.json({ success: true, message: "Attendance updated successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 
 
