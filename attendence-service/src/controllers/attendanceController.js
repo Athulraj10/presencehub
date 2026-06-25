@@ -52,6 +52,26 @@ const getOfficeGeofence = async () => {
   return results[0];
 };
 
+// ─── FIX #1 helper ───────────────────────────────────────────────────────────
+// Validates that latitude and longitude are present and numeric.
+// Returns an error response and true if invalid, false if all good.
+const validateCoords = (latitude, longitude, res) => {
+  if (
+    latitude === undefined ||
+    longitude === undefined ||
+    isNaN(Number(latitude)) ||
+    isNaN(Number(longitude))
+  ) {
+    res.status(400).json({
+      success: false,
+      message: "Valid latitude and longitude are required"
+    });
+    return true; // invalid — caller should return immediately
+  }
+  return false; // valid
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 exports.punchIn =
 async (req, res) => {
 
@@ -76,6 +96,9 @@ try {
     });
 
   }
+
+  // FIX #1 — coordinates are now required for punch-in
+  if (validateCoords(latitude, longitude, res)) return;
 
   const parsedTimestamp = parseUTC(timestamp);
   if (
@@ -120,36 +143,30 @@ try {
 
   }
 
-  if (
-    latitude !== undefined &&
-    longitude !== undefined
-  ) {
+  // Geofence check — always runs now because coords are guaranteed above
+  const geofence =
+    await getOfficeGeofence();
 
-    const geofence =
-      await getOfficeGeofence();
+  const isInsideGeofence =
+    geolib.isPointWithinRadius(
+      {
+        latitude: Number(latitude),
+        longitude: Number(longitude)
+      },
+      {
+        latitude: Number(geofence.latitude),
+        longitude: Number(geofence.longitude)
+      },
+      Number(geofence.radius)
+    );
 
-    const isInsideGeofence =
-      geolib.isPointWithinRadius(
-        {
-          latitude,
-          longitude
-        },
-        {
-          latitude: Number(geofence.latitude),
-          longitude: Number(geofence.longitude)
-        },
-        Number(geofence.radius)
-      );
+  if (!isInsideGeofence) {
 
-    if (!isInsideGeofence) {
-
-      return res.status(403).json({
-        success: false,
-        message:
-          `You are outside ${geofence.office_name}. Punch In not allowed.`
-      });
-
-    }
+    return res.status(403).json({
+      success: false,
+      message:
+        `You are outside ${geofence.office_name}. Punch In not allowed.`
+    });
 
   }
 
@@ -210,8 +227,8 @@ try {
       timestamp,
       attendanceDate,
       isLate,
-      latitude ?? null,
-      longitude ?? null
+      latitude,
+      longitude
     ]
   );
 
@@ -274,6 +291,9 @@ try {
 
   }
 
+  // FIX #1 — coordinates are now required for punch-out
+  if (validateCoords(latitude, longitude, res)) return;
+
   const parsedTimestamp = parseUTC(timestamp);
   if (
     isNaN(
@@ -317,36 +337,30 @@ try {
 
   }
 
-  if (
-    latitude !== undefined &&
-    longitude !== undefined
-  ) {
+  // Geofence check — always runs now because coords are guaranteed above
+  const geofence =
+    await getOfficeGeofence();
 
-    const geofence =
-      await getOfficeGeofence();
+  const isInsideGeofence =
+    geolib.isPointWithinRadius(
+      {
+        latitude: Number(latitude),
+        longitude: Number(longitude)
+      },
+      {
+        latitude: Number(geofence.latitude),
+        longitude: Number(geofence.longitude)
+      },
+      Number(geofence.radius)
+    );
 
-    const isInsideGeofence =
-      geolib.isPointWithinRadius(
-        {
-          latitude,
-          longitude
-        },
-        {
-          latitude: Number(geofence.latitude),
-          longitude: Number(geofence.longitude)
-        },
-        Number(geofence.radius)
-      );
+  if (!isInsideGeofence) {
 
-    if (!isInsideGeofence) {
-
-      return res.status(403).json({
-        success: false,
-        message:
-          `You are outside ${geofence.office_name}. Punch Out not allowed.`
-      });
-
-    }
+    return res.status(403).json({
+      success: false,
+      message:
+        `You are outside ${geofence.office_name}. Punch Out not allowed.`
+    });
 
   }
 
@@ -436,6 +450,17 @@ try {
     getLocalHour(punchOutTime)
     < officeEndHour;
 
+  // FIX #2 — resolve any open geofence breach when employee punches out
+  await pool.query(
+    `
+    UPDATE geofence_breach_alerts
+    SET resolved_at = ?
+    WHERE employee_id = ?
+    AND resolved_at IS NULL
+    `,
+    [new Date(), employeeId]
+  );
+
   await pool.query(
     `
     UPDATE attendance
@@ -454,8 +479,8 @@ try {
       workingHours,
       overtimeHours,
       earlyDeparture,
-      latitude ?? null,
-      longitude ?? null,
+      latitude,
+      longitude,
       employeeId,
       attendanceDate
     ]
@@ -499,6 +524,145 @@ try {
 }
 
 };
+
+// ─── FIX #2 — Location ping endpoint ─────────────────────────────────────────
+// Called by the frontend every 2 minutes while the employee is checked in.
+// Records the ping, checks geofence, and manages breach tracking.
+exports.locationPing =
+async (req, res) => {
+
+try {
+
+  const {
+    employeeId,
+    latitude,
+    longitude
+  } = req.body;
+
+  if (!employeeId) {
+    return res.status(400).json({
+      success: false,
+      message: "employeeId is required"
+    });
+  }
+
+  if (validateCoords(latitude, longitude, res)) return;
+
+  // Only track pings for employees currently punched in (no punch_out yet today)
+  const today = getLocalDateString(new Date());
+
+  const [session] = await pool.query(
+    `
+    SELECT *
+    FROM attendance
+    WHERE employee_id = ?
+    AND attendance_date = ?
+    AND punch_out IS NULL
+    `,
+    [employeeId, today]
+  );
+
+  if (session.length === 0) {
+    return res.status(200).json({
+      success: true,
+      message: "Not checked in — ping ignored"
+    });
+  }
+
+  const geofence = await getOfficeGeofence();
+
+  const isInside = geolib.isPointWithinRadius(
+    {
+      latitude: Number(latitude),
+      longitude: Number(longitude)
+    },
+    {
+      latitude: Number(geofence.latitude),
+      longitude: Number(geofence.longitude)
+    },
+    Number(geofence.radius)
+  );
+
+  // Store the ping for audit trail
+  await pool.query(
+    `
+    INSERT INTO location_pings
+    (employee_id, latitude, longitude, is_inside, pinged_at)
+    VALUES (?, ?, ?, ?, ?)
+    `,
+    [employeeId, latitude, longitude, isInside, new Date()]
+  );
+
+  if (!isInside) {
+
+    // Check if a breach record already exists for this employee
+    const [existingBreach] = await pool.query(
+      `
+      SELECT *
+      FROM geofence_breach_alerts
+      WHERE employee_id = ?
+      AND resolved_at IS NULL
+      `,
+      [employeeId]
+    );
+
+    if (existingBreach.length === 0) {
+      // First ping outside — start the breach clock
+      await pool.query(
+        `
+        INSERT INTO geofence_breach_alerts
+        (employee_id, breach_start)
+        VALUES (?, ?)
+        `,
+        [employeeId, new Date()]
+      );
+
+      console.log(
+        `[${new Date().toISOString()}] [WARN] [attendance-service] Geofence breach started | employeeId=${employeeId} | lat=${latitude} | lng=${longitude}`
+      );
+    }
+
+  } else {
+
+    // Employee is back inside — resolve any open breach
+    const [resolved] = await pool.query(
+      `
+      UPDATE geofence_breach_alerts
+      SET resolved_at = ?
+      WHERE employee_id = ?
+      AND resolved_at IS NULL
+      `,
+      [new Date(), employeeId]
+    );
+
+    if (resolved.affectedRows > 0) {
+      console.log(
+        `[${new Date().toISOString()}] [INFO] [attendance-service] Geofence breach resolved | employeeId=${employeeId}`
+      );
+    }
+
+  }
+
+  res.json({
+    success: true,
+    isInside,
+    officeName: geofence.office_name
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 exports.getAttendanceHistory =
 async (req, res) => {

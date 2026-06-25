@@ -41,11 +41,11 @@ function Dashboard() {
   };
 
   const getCurrentTimestamp = () => {
-    return new Date()
-      .toISOString()
-      .slice(0, 19)
-      .replace("T", " ");
-  };
+  return new Date()
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+};
 
   const getKolkataDateString = (dateInput) => {
     const date = new Date(dateInput);

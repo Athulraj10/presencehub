@@ -12,6 +12,11 @@ attendanceController.punchIn
 );
 
 router.post(
+    "/location-ping", 
+    attendanceController.locationPing
+);
+
+router.post(
 "/punch-out",
 attendanceController.punchOut
 );

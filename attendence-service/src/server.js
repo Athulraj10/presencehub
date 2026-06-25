@@ -18,6 +18,9 @@ async function startServices() {
 
   startEmployeeConsumer();
 
+
+  require("./jobs/breachNotifier");
+
   app.listen(PORT, () => {
     console.log(
       `Server running on port ${PORT}`
@@ -26,9 +29,3 @@ async function startServices() {
 }
 
 startServices();
-
-
-
-
-
-
