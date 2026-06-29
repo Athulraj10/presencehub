@@ -1,7 +1,8 @@
 import { useState } from "react";
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/employee";
 import ForgotPassword from "./pages/ForgotPassword";
+import HRDashboard from "./pages/HRDashboard";
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(
@@ -31,7 +32,13 @@ function App() {
   return (
     <>
       {loggedIn ? (
-        <Dashboard role={role} />
+
+        localStorage.getItem("role") === "hr" || localStorage.getItem("role") === "admin" ? (
+          <HRDashboard />
+        ) : (
+          <Dashboard />
+        )
+
       ) : (
         <Login
           onLogin={handleLogin}

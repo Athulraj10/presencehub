@@ -185,12 +185,13 @@ try {
 
   const [existingAttendance] =
     await pool.query(
-      `
-      SELECT *
-      FROM attendance
-      WHERE employee_id = ?
-      AND attendance_date = ?
-      `,
+     `
+    SELECT *
+    FROM attendance
+    WHERE employee_id = ?
+    AND attendance_date = ?
+    AND punch_out IS NULL
+    `,
       [
         employeeId,
         attendanceDate
@@ -450,7 +451,7 @@ try {
     getLocalHour(punchOutTime)
     < officeEndHour;
 
-  // FIX #2 — resolve any open geofence breach when employee punches out
+  
   await pool.query(
     `
     UPDATE geofence_breach_alerts
@@ -525,9 +526,9 @@ try {
 
 };
 
-// ─── FIX #2 — Location ping endpoint ─────────────────────────────────────────
-// Called by the frontend every 2 minutes while the employee is checked in.
-// Records the ping, checks geofence, and manages breach tracking.
+
+
+
 exports.locationPing =
 async (req, res) => {
 
@@ -548,7 +549,7 @@ try {
 
   if (validateCoords(latitude, longitude, res)) return;
 
-  // Only track pings for employees currently punched in (no punch_out yet today)
+  
   const today = getLocalDateString(new Date());
 
   const [session] = await pool.query(
@@ -624,7 +625,7 @@ try {
 
   } else {
 
-    // Employee is back inside — resolve any open breach
+    
     const [resolved] = await pool.query(
       `
       UPDATE geofence_breach_alerts
@@ -1127,5 +1128,83 @@ try {
   });
 
 }
+};
+exports.updateAttendance = async (req, res) => {
+  try {
+    const {
+      attendanceId,
+      punchIn,
+      punchOut,
+      status,
+      remarks
+    } = req.body;
 
+    if (!attendanceId) {
+      return res.status(400).json({
+        success: false,
+        message: "attendanceId is required"
+      });
+    }
+
+    const updateFields = [];
+    const values = [];
+
+    if (punchIn !== undefined) {
+      updateFields.push("punch_in = ?");
+      values.push(punchIn);
+    }
+
+    if (punchOut !== undefined) {
+      updateFields.push("punch_out = ?");
+      values.push(punchOut);
+    }
+
+    if (status !== undefined) {
+      updateFields.push("status = ?");
+      values.push(status);
+    }
+
+    if (remarks !== undefined) {
+      updateFields.push("remarks = ?");
+      values.push(remarks);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No fields provided for update"
+      });
+    }
+
+    values.push(attendanceId);
+
+    const [result] = await pool.query(
+      `
+      UPDATE attendance
+      SET ${updateFields.join(", ")}
+      WHERE id = ?
+      `,
+      values
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Attendance updated successfully"
+    });
+
+  } catch (error) {
+    console.error("Update Attendance Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };

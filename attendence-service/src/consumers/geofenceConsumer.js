@@ -1,6 +1,18 @@
 const { getChannel } = require("../config/rabbitmq");
 const pool = require("../config/db");
 
+function getLocalDateString(date = new Date()) {
+  return date.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+}
+
+function getLocalTimestamp(date = new Date()) {
+  return date.toLocaleString("sv-SE", {
+    timeZone: "Asia/Kolkata",
+  });
+}
+
 async function startGeofenceConsumer() {
   const channel = getChannel();
 
@@ -22,22 +34,43 @@ async function startGeofenceConsumer() {
         console.log("Geofence Event Received:", data);
 
         if (insideGeofence) {
-          // Employee entered office — auto punch-in if not already done
-          const date = new Date(timestamp).toISOString().split("T")[0];
+          // IST date
+          const eventDate = new Date(timestamp);
+          const date = getLocalDateString(eventDate);
+
           const [existing] = await pool.query(
-            `SELECT * FROM attendance WHERE employee_id = ? AND attendance_date = ?`,
+            `SELECT * FROM attendance 
+             WHERE employee_id = ? 
+             AND attendance_date = ?`,
             [employeeId, date]
           );
 
           if (existing.length === 0) {
-            const ts = new Date(timestamp).toISOString().slice(0, 19).replace("T", " ");
-            const officeStart = new Date(date + " 09:00:00");
-            const isLate = new Date(ts) > officeStart;
+            // IST timestamp
+            const ts = getLocalTimestamp(eventDate);
+
+            // Office start time in IST
+            const officeStart = new Date(`${date}T09:00:00+05:30`);
+
+            const isLate = eventDate > officeStart;
 
             await pool.query(
-              `INSERT INTO attendance (employee_id, punch_in, attendance_date, is_late) VALUES (?, ?, ?, ?)`,
-              [employeeId, ts, date, isLate]
+              `INSERT INTO attendance
+               (
+                 employee_id,
+                 punch_in,
+                 attendance_date,
+                 is_late
+               )
+               VALUES (?, ?, ?, ?)`,
+              [
+                employeeId,
+                ts,
+                date,
+                isLate
+              ]
             );
+
             console.log(`Auto punch-in for ${employeeId}`);
           }
         }
