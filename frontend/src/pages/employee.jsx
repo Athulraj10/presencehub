@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import attendanceApi from "../services/attendanceApi";
 import api from "../services/api";
 import "../employee.css"; 
+import ChangePassword from "./ChangePassword";
+import ReportIssue from "./ReportIssue";
 
 function Dashboard() {
   const employeeId = localStorage.getItem("employeeId");
@@ -9,6 +11,7 @@ function Dashboard() {
 
   // --- Tab Selection State ---
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [subView, setSubView] = useState(null);
 
   // --- Dynamic Dashboard States ---
   const [employeeName, setEmployeeName] = useState("Employee");
@@ -400,6 +403,13 @@ function Dashboard() {
     setAppliedStatusFilter(statusFilterInput);
     setHistoryPage(1);
   };
+
+  if (subView === "change-password") {
+    return <ChangePassword goBack={() => setSubView(null)} email={profileData?.email} />;
+  }
+  if (subView === "report-issue") {
+    return <ReportIssue goBack={() => setSubView(null)} currentUser={profileData} />;
+  }
 
   if (loading) {
     return (
@@ -940,7 +950,7 @@ function Dashboard() {
                       </div>
                     </div>
                     <div className="profile-settings-list">
-                      <div className="settings-item" onClick={() => alert("Change Password feature is managed by Enterprise IT.")}>
+                      <div className="settings-item" onClick={() => setSubView("change-password")}>
                         <div className="settings-item-left">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="settings-icon" style={{ width: 18, height: 18 }}>
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -980,7 +990,7 @@ function Dashboard() {
                       </div>
                     </div>
                     <div className="profile-settings-list">
-                      <div className="settings-item" onClick={() => alert("Report an Issue tool loading...")}>
+                      <div className="settings-item" onClick={() => setSubView("report-issue")}>
                         <div className="settings-item-left">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="settings-icon" style={{ width: 18, height: 18 }}>
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

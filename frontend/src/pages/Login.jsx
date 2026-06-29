@@ -1,14 +1,22 @@
-﻿import "../Login.css";
-import { useState } from "react";
+import React, { useState } from "react";
+import { Mail, Lock, Shield, Eye, EyeOff, HelpCircle, Globe, ArrowRight } from "lucide-react";
 import api from "../services/api";
 
 function Login({ onLogin, onForgotPassword }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!email || !password) {
+      alert("Please fill in all fields");
+      return;
+    }
+
     try {
+      setLoading(true);
       const response = await api.post("/employees/login", {
         email,
         password,
@@ -17,128 +25,134 @@ function Login({ onLogin, onForgotPassword }) {
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("employeeId", response.data.employeeId);
       localStorage.setItem("role", response.data.role);
+      
+      // Let's store the email too for Change Password and other profile features
+      localStorage.setItem("employeeEmail", email);
 
-      alert("Login Successful");
       onLogin();
     } catch (error) {
       alert(error.response?.data?.message || "Login Failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        
-        {/* TOP LOGO BOX */}
-        <div className="logo-box">
-          <svg viewBox="0 0 32 32" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            {/* Clean arched shackle */}
-            <path d="M11 13V9a5 5 0 1 1 10 0v4" />
-            
-            {/* Main lock body */}
-            <rect x="7" y="13" width="18" height="12" rx="2" ry="2" />
-            
-            {/* Clear cutout ring over the corner */}
-            <circle cx="22" cy="21" r="4.5" fill="#0a2c7f" stroke="#0a2c7f" strokeWidth="1" />
-            
-            {/* Perfect user profile badge centered inside the cutout */}
-            <circle cx="22" cy="19.5" r="1.8" fill="none" stroke="#ffffff" strokeWidth="2" />
-            <path d="M18.5 24c0-1 1-2.2 3.5-2.2s3.5 1.2 3.5 2.2" fill="none" stroke="#ffffff" strokeWidth="2" />
-          </svg>
+    <div className="relative min-h-screen w-full bg-[#F8FAFC] flex flex-col justify-between p-6 overflow-hidden select-none font-sans">
+      {/* Top Header (Matching ForgotPassword design) */}
+      <div className="w-full flex justify-between items-center z-10">
+        <div className="flex items-center gap-2 text-blue-600 font-semibold text-lg">
+          <Shield className="w-5 h-5 fill-current" />
+          <span>Security</span>
         </div>
-        
-        <h1>Welcome</h1>
-
-        <p className="subtitle">
-          Authorized access only. Please sign in to your enterprise account.
-        </p>
-
-        {/* EMAIL FIELD */}
-        <div className="field-block">
-          <label htmlFor="email">EMAIL</label>
-          <div className="input-box">
-            <span className="input-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <circle cx="9" cy="10" r="2" />
-                <path d="M5 17c0-2 4-3 4-3s4 1 4 3" />
-                <line x1="15" y1="9" x2="19" y2="9" />
-                <line x1="15" y1="13" x2="19" y2="13" />
-              </svg>
-            </span>
-            <input
-              id="email"
-              type="email"
-              placeholder="Enter your Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* PASSWORD FIELD */}
-        <div className="field-block">
-          <div className="field-header">
-            <label htmlFor="password">PASSWORD</label>
-            <button type="button" className="forgot-link" onClick={onForgotPassword}>
-              Forgot Password?
-            </button>
-          </div>
-          <div className="input-box">
-            <span className="input-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            </span>
-            <input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <button
-              type="button"
-              className="eye-btn"
-              onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "20px", height: "20px" }}>
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <button className="login-btn" onClick={handleLogin}>
-          Sign In
-          <span aria-hidden="true">→</span>
+        <button className="text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-6 h-6" />
         </button>
+      </div>
 
-        {/* FOOTER */}
-        <div className="footer">
-          <p>Security Policy © 2024. All Rights Reserved.</p>
-          <div className="footer-links">
-            <span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "14px", height: "14px", marginRight: "4px", verticalAlign: "middle" }}>
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              Support
-            </span>
-            <span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "14px", height: "14px", marginRight: "4px", verticalAlign: "middle" }}>
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-              Language
-            </span>
+      {/* Main Login Card */}
+      <div className="flex-1 flex items-center justify-center z-10 py-10">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 max-w-[420px] w-full">
+          {/* Logo Circle */}
+          <div className="w-12 h-12 bg-blue-600 text-white rounded-xl flex items-center justify-center mx-auto mb-5 shadow-md shadow-blue-200">
+            <Shield className="w-6 h-6 fill-current" />
           </div>
+
+          <h1 className="text-2xl font-bold text-slate-950 text-center mb-1.5">
+            Welcome
+          </h1>
+          <p className="text-sm text-slate-500 text-center mb-6 leading-relaxed">
+            Authorized access only. Please sign in to your enterprise account.
+          </p>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Email Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
+                Email
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                  <Mail className="w-5 h-5" />
+                </span>
+                <input
+                  type="email"
+                  required
+                  placeholder="Enter your Email"
+                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-800 placeholder-slate-400 transition-shadow bg-white"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={onForgotPassword}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                  <Lock className="w-5 h-5" />
+                </span>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-10 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-800 placeholder-slate-400 transition-shadow bg-white"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Sign In Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mt-2 shadow-sm"
+            >
+              <span>{loading ? "Signing In..." : "Sign In"}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
         </div>
+      </div>
+
+      {/* Footer */}
+      <div className="w-full z-10 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/60 pt-4 text-xs text-slate-400">
+        <p>Security Policy © 2024. All Rights Reserved.</p>
+        <div className="flex gap-4 mt-2 sm:mt-0">
+          <button className="flex items-center gap-1 hover:text-slate-600 transition-colors">
+            <HelpCircle className="w-4 h-4" />
+            <span>Support</span>
+          </button>
+          <button className="flex items-center gap-1 hover:text-slate-600 transition-colors">
+            <Globe className="w-4 h-4" />
+            <span>Language</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Faded Watermark in Bottom-Right */}
+      <div className="absolute -bottom-8 -right-8 w-64 h-64 text-blue-100/35 pointer-events-none z-0">
+        <Shield className="w-full h-full stroke-[1.25]" />
       </div>
     </div>
   );
