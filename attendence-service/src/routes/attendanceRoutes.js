@@ -47,6 +47,11 @@ attendanceController.getAttendanceReport
 );
 
 router.get(
+  "/breaches",
+  attendanceController.getBreaches
+);
+
+router.get(
 "/dashboard/:employeeId",
 attendanceController.getDashboard
 );

@@ -20,6 +20,21 @@ const toISTDateString = (timestamp) => {
 };
 
 const parseUTC = (timestamp) => {
+  if (!timestamp) return null;
+  if (typeof timestamp === "string") {
+    const formatted = timestamp.replace(" ", "T");
+    if (!formatted.endsWith("Z") && !formatted.includes("+")) {
+      return new Date(formatted + "Z");
+    }
+  } else if (timestamp instanceof Date) {
+    const year = timestamp.getFullYear();
+    const month = String(timestamp.getMonth() + 1).padStart(2, "0");
+    const day = String(timestamp.getDate()).padStart(2, "0");
+    const hours = String(timestamp.getHours()).padStart(2, "0");
+    const minutes = String(timestamp.getMinutes()).padStart(2, "0");
+    const seconds = String(timestamp.getSeconds()).padStart(2, "0");
+    return new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`);
+  }
   return new Date(timestamp);
 };
 
@@ -205,7 +220,7 @@ try {
     return res.status(400).json({
       success: false,
       message:
-        "Employee already punched in today"
+        "Employee is already punched in. Please punch out first."
     });
 
   }
@@ -375,6 +390,7 @@ try {
       FROM attendance
       WHERE employee_id = ?
       AND attendance_date = ?
+      AND punch_out IS NULL
       `,
       [
         employeeId,
@@ -389,25 +405,13 @@ try {
     return res.status(404).json({
       success: false,
       message:
-        "No punch-in record found for today"
-    });
-
-  }
-
-  if (
-    attendanceRecord[0].punch_out
-  ) {
-
-    return res.status(400).json({
-      success: false,
-      message:
-        "Employee already punched out"
+        "No active punch-in record found for today"
     });
 
   }
 
   const punchInTime =
-    new Date(
+    parseUTC(
       attendanceRecord[0].punch_in
     );
 
@@ -472,8 +476,7 @@ try {
       early_departure = ?,
       punch_out_lat = ?,
       punch_out_lng = ?
-    WHERE employee_id = ?
-    AND attendance_date = ?
+    WHERE id = ?
     `,
     [
       timestamp,
@@ -482,8 +485,7 @@ try {
       earlyDeparture,
       latitude,
       longitude,
-      employeeId,
-      attendanceDate
+      attendanceRecord[0].id
     ]
   );
 
@@ -943,13 +945,13 @@ try {
     await pool.query(
       `
       SELECT
-        COUNT(*) AS presentDays,
+        COUNT(DISTINCT attendance_date) AS presentDays,
 
-        SUM(
-          CASE
+        COUNT(
+          DISTINCT CASE
             WHEN is_late = TRUE
-            THEN 1
-            ELSE 0
+            THEN attendance_date
+            ELSE NULL
           END
         ) AS lateDays,
 
@@ -963,11 +965,11 @@ try {
           0
         ) AS overtimeHours,
 
-        SUM(
-          CASE
+        COUNT(
+          DISTINCT CASE
             WHEN early_departure = TRUE
-            THEN 1
-            ELSE 0
+            THEN attendance_date
+            ELSE NULL
           END
         ) AS earlyDepartureDays
 
@@ -999,25 +1001,62 @@ try {
     [employeeId, todayDate]
   );
 
-  const isCheckedIn =
-    currentSession.length > 0 &&
-    currentSession[0].punch_out === null;
+  const activeSession = currentSession.find(s => s.punch_out === null);
+  const isCheckedIn = !!activeSession;
 
-  let activeDuration = "00:00:00";
-  if (isCheckedIn && currentSession[0].punch_in) {
-    const punchInTime = new Date(currentSession[0].punch_in);
+  let totalSeconds = 0;
+  
+  // 1. Sum up all completed sessions for today
+  for (const session of currentSession) {
+    if (session.punch_in && session.punch_out) {
+      const pIn = parseUTC(session.punch_in);
+      const pOut = parseUTC(session.punch_out);
+      if (pIn && pOut && !isNaN(pIn.getTime()) && !isNaN(pOut.getTime())) {
+        const diffMs = pOut - pIn;
+        if (diffMs > 0) {
+          totalSeconds += Math.floor(diffMs / 1000);
+        }
+      }
+    }
+  }
+
+  // 2. Add current active session duration (if checked in)
+  if (isCheckedIn && activeSession.punch_in) {
+    const pIn = parseUTC(activeSession.punch_in);
+    if (pIn && !isNaN(pIn.getTime())) {
+      const now = new Date();
+      const diffMs = now - pIn;
+      if (diffMs > 0) {
+        totalSeconds += Math.floor(diffMs / 1000);
+      }
+    }
+  }
+
+  // 3. Format total active seconds as hh:mm:ss
+  const secs = totalSeconds % 60;
+  const mins = Math.floor(totalSeconds / 60) % 60;
+  const hrs = Math.floor(totalSeconds / 3600);
+  const activeDuration = [
+    String(hrs).padStart(2, "0"),
+    String(mins).padStart(2, "0"),
+    String(secs).padStart(2, "0")
+  ].join(":");
+
+  // 3.5 Check for active geofence breach warning threshold (10 minutes)
+  const [activeBreaches] = await pool.query(
+    `SELECT * FROM geofence_breach_alerts
+     WHERE employee_id = ?
+     AND resolved_at IS NULL`,
+    [employeeId]
+  );
+  
+  let hasBreachAlert = false;
+  if (activeBreaches.length > 0) {
+    const breachStart = new Date(activeBreaches[0].breach_start);
     const now = new Date();
-    const diffMs = now - punchInTime;
-    if (diffMs > 0) {
-      const diffSecs = Math.floor(diffMs / 1000);
-      const secs = diffSecs % 60;
-      const mins = Math.floor(diffSecs / 60) % 60;
-      const hrs = Math.floor(diffSecs / 3600);
-      activeDuration = [
-        String(hrs).padStart(2, "0"),
-        String(mins).padStart(2, "0"),
-        String(secs).padStart(2, "0")
-      ].join(":");
+    const elapsedSeconds = Math.floor((now - breachStart) / 1000);
+    if (elapsedSeconds >= 600) { // 10 minutes threshold
+      hasBreachAlert = true;
     }
   }
 
@@ -1034,7 +1073,8 @@ try {
       activeDuration,
       lateDays: stats.lateDays || 0,
       overtimeHours: stats.overtimeHours || 0,
-      earlyDepartureDays: stats.earlyDepartureDays || 0
+      earlyDepartureDays: stats.earlyDepartureDays || 0,
+      hasBreachAlert
     }
   });
 
@@ -1058,7 +1098,7 @@ exports.getAlerts = async (req, res) => {
 
     const [rows] = await pool.query(
       `
-      SELECT COUNT(*) AS lateDays
+      SELECT COUNT(DISTINCT attendance_date) AS lateDays
       FROM attendance
       WHERE employee_id = ?
       AND is_late = TRUE
@@ -1103,7 +1143,7 @@ try {
   const [rows] =
     await pool.query(
       `
-      SELECT COUNT(*) AS lateDays
+      SELECT COUNT(DISTINCT attendance_date) AS lateDays
       FROM attendance
       WHERE employee_id = ?
       AND is_late = TRUE
@@ -1202,6 +1242,28 @@ exports.updateAttendance = async (req, res) => {
   } catch (error) {
     console.error("Update Attendance Error:", error);
 
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+exports.getBreaches = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT b.*, e.name AS employee_name
+       FROM geofence_breach_alerts b
+       JOIN employees e ON e.employee_id = b.employee_id
+       WHERE b.resolved_at IS NULL
+         AND TIMESTAMPDIFF(SECOND, b.breach_start, NOW()) >= 600`
+    );
+    res.json({
+      success: true,
+      breaches: rows
+    });
+  } catch (error) {
+    console.error("Get Breaches Error:", error);
     res.status(500).json({
       success: false,
       message: error.message
