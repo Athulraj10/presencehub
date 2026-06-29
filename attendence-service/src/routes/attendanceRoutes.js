@@ -1,42 +1,73 @@
 const express = require("express");
 
 const router =
-  express.Router();
+express.Router();
 
 const attendanceController =
-  require("../controllers/attendanceController");
+require("../controllers/attendanceController");
 
 router.post(
-  "/punch-in",
-  attendanceController.punchIn
+"/punch-in",
+attendanceController.punchIn
 );
 
 router.post(
-  "/punch-out",
-  attendanceController.punchOut
+"/punch-out",
+attendanceController.punchOut
+);
+
+router.put(
+"/update",
+attendanceController.updateAttendance
 );
 
 router.get(
-  "/date/:date",
-  attendanceController.getAttendanceByDate
+"/date/:date",
+attendanceController.getAttendanceByDate
 );
 
 router.get(
-  "/month/:employeeId",
-  attendanceController.getMonthlyAttendance
+"/month/:employeeId",
+attendanceController.getMonthlyAttendance
 );
 
 router.get(
-  "/summary/:employeeId",
-  attendanceController.getAttendanceSummary
+"/summary/:employeeId",
+attendanceController.getAttendanceSummary
 );
 
 router.get(
-  "/:employeeId",
-  attendanceController.getAttendanceHistory
+"/report/:employeeId",
+attendanceController.getAttendanceReport
+);
+
+router.get(
+"/dashboard/:employeeId",
+attendanceController.getDashboard
+);
+
+router.get(
+"/alerts/:employeeId",
+attendanceController.getAlerts
+);
+
+router.get(
+"/late/:employeeId",
+attendanceController.getLateAttendanceCount
+);
+
+router.get(
+"/:employeeId",
+attendanceController.getAttendanceHistory
 );
 
 module.exports = router;
+
+
+
+
+
+
 
 
 

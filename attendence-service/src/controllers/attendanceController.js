@@ -1,423 +1,977 @@
 const publishEvent =
-  require("../utils/publisher");
+require("../utils/publisher");
 
 const pool =
-  require("../config/db");
+require("../config/db");
 
-exports.punchIn = async (req, res) => {
-  try {
+const {
+  validateEmployee
+} = require(
+  "../services/employeeService"
+);
 
-    const {
-      employeeId,
-      timestamp
-    } = req.body;
-
-    if (!employeeId || !timestamp) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "employeeId and timestamp required"
-      });
-    }
-
-    // Validate timestamp format
-    if (
-      isNaN(
-        new Date(timestamp)
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid timestamp format"
-      });
-    }
-
-    // Prevent future timestamps
-    if (
-      new Date(timestamp) >
-      new Date()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Future timestamps not allowed"
-      });
-    }
-
-    const attendanceDate =
-      timestamp.split(" ")[0];
-
-    const [existingAttendance] =
-      await pool.query(
-        `
-        SELECT *
-        FROM attendance
-        WHERE employee_id = ?
-        AND attendance_date = ?
-        `,
-        [
-          employeeId,
-          attendanceDate
-        ]
-      );
-
-    if (
-      existingAttendance.length > 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Employee already punched in today"
-      });
-    }
-
-    await pool.query(
-      `
-      INSERT INTO attendance
-      (
-        employee_id,
-        punch_in,
-        attendance_date
-      )
-      VALUES (?, ?, ?)
-      `,
-      [
-        employeeId,
-        timestamp,
-        attendanceDate
-      ]
-    );
-
-    await publishEvent(
-      "attendance.punchin",
-      {
-        employeeId,
-        timestamp
-      }
-    );
-
-    res.status(201).json({
-      success: true,
-      message:
-        "Punch In Successful"
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.status(500).json({
-      success: false,
-      message:
-        error.message
-    });
-  }
+const parseUTC = (ts) => {
+  if (!ts) return new Date();
+  if (ts.includes("T") || ts.endsWith("Z")) return new Date(ts);
+  return new Date(ts.replace(" ", "T") + "Z");
 };
 
-exports.punchOut = async (req, res) => {
-  try {
+const getLocalDateString = (date) => {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+};
 
-    const {
-      employeeId,
-      timestamp
-    } = req.body;
+const getLocalHour = (date) => {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      hour12: false
+    }).format(date)
+  );
+};
 
-    if (!employeeId || !timestamp) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "employeeId and timestamp required"
-      });
-    }
+exports.punchIn =
+async (req, res) => {
 
-    // Validate timestamp format
-    if (
-      isNaN(
-        new Date(timestamp)
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid timestamp format"
-      });
-    }
 
-    // Prevent future timestamps
-    if (
-      new Date(timestamp) >
-      new Date()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Future timestamps not allowed"
-      });
-    }
+try {
 
-    const attendanceDate =
-      timestamp.split(" ")[0];
+  const {
+    employeeId,
+    timestamp
+  } = req.body;
 
-    const [attendanceRecord] =
-      await pool.query(
-        `
-        SELECT *
-        FROM attendance
-        WHERE employee_id = ?
-        AND attendance_date = ?
-        `,
-        [
-          employeeId,
-          attendanceDate
-        ]
-      );
+  if (
+    !employeeId ||
+    !timestamp
+  ) {
 
-    if (
-      attendanceRecord.length === 0
-    ) {
-      return res.status(404).json({
-        success: false,
-        message:
-          "No punch-in record found for today"
-      });
-    }
+    return res.status(400).json({
+      success: false,
+      message:
+        "employeeId and timestamp required"
+    });
 
-    if (
-      attendanceRecord[0].punch_out
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Employee already punched out"
-      });
-    }
+  }
 
-    const punchInTime =
-      new Date(
-        attendanceRecord[0].punch_in
-      );
+  const parsedTimestamp = parseUTC(timestamp);
+  if (
+    isNaN(
+      parsedTimestamp.getTime()
+    )
+  ) {
 
-    const punchOutTime =
-      new Date(timestamp);
+    return res.status(400).json({
+      success: false,
+      message:
+        "Invalid timestamp format"
+    });
 
-    if (punchOutTime < punchInTime) {
-      return res.status(400).json({
-        success: false,
-        message: "Punch out time cannot be earlier than punch in time"
-      });
-    }
+  }
 
-    const workingHours =
-      (
-        (punchOutTime - punchInTime)
-        / (1000 * 60 * 60)
-      ).toFixed(2);
+  if (
+    parsedTimestamp >
+    new Date(Date.now() + 5 * 60 * 1000)
+  ) {
 
+    return res.status(400).json({
+      success: false,
+      message:
+        "Future timestamps not allowed"
+    });
+
+  }
+
+  /*
+  const employeeExists =
+    await validateEmployee(
+      employeeId
+    );
+
+  if (!employeeExists) {
+
+    return res.status(404).json({
+      success: false,
+      message:
+        "Employee not found"
+    });
+
+  }
+  */
+
+  const attendanceDate =
+    getLocalDateString(parsedTimestamp);
+
+  const officeStartTime =
+    new Date(
+      attendanceDate +
+      "T09:00:00+05:30"
+    );
+
+  const isLate =
+    parsedTimestamp >
+    officeStartTime;
+
+  const [existingAttendance] =
     await pool.query(
       `
-      UPDATE attendance
-      SET punch_out = ?,
-          working_hours = ?
+      SELECT *
+      FROM attendance
       WHERE employee_id = ?
       AND attendance_date = ?
       `,
       [
-        timestamp,
-        workingHours,
         employeeId,
         attendanceDate
       ]
     );
 
-    await publishEvent(
-      "attendance.punchout",
-      {
-        employeeId,
-        timestamp,
-        workingHours
-      }
+  if (
+    existingAttendance.length > 0
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "Employee already punched in today"
+    });
+
+  }
+
+  await pool.query(
+    `
+    INSERT INTO attendance
+    (
+      employee_id,
+      punch_in,
+      attendance_date,
+      is_late
+    )
+    VALUES (?, ?, ?, ?)
+    `,
+    [
+      employeeId,
+      timestamp,
+      attendanceDate,
+      isLate
+    ]
+  );
+
+  await publishEvent(
+    "attendance.punchin",
+    {
+      employeeId,
+      timestamp
+    }
+  );
+
+  res.status(201).json({
+    success: true,
+    message:
+      "Punch In Successful"
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.punchOut =
+async (req, res) => {
+
+
+try {
+
+  const {
+    employeeId,
+    timestamp
+  } = req.body;
+
+  if (
+    !employeeId ||
+    !timestamp
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "employeeId and timestamp required"
+    });
+
+  }
+
+  const parsedTimestamp = parseUTC(timestamp);
+  if (
+    isNaN(
+      parsedTimestamp.getTime()
+    )
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "Invalid timestamp format"
+    });
+
+  }
+
+  if (
+    parsedTimestamp >
+    new Date(Date.now() + 5 * 60 * 1000)
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "Future timestamps not allowed"
+    });
+
+  }
+
+  /*
+  const employeeExists =
+    await validateEmployee(
+      employeeId
     );
+
+  if (!employeeExists) {
+
+    return res.status(404).json({
+      success: false,
+      message:
+        "Employee not found"
+    });
+
+  }
+  */
+
+  const attendanceDate =
+    getLocalDateString(parsedTimestamp);
+
+  const [attendanceRecord] =
+    await pool.query(
+      `
+      SELECT *
+      FROM attendance
+      WHERE employee_id = ?
+      AND attendance_date = ?
+      `,
+      [
+        employeeId,
+        attendanceDate
+      ]
+    );
+
+  if (
+    attendanceRecord.length === 0
+  ) {
+
+    return res.status(404).json({
+      success: false,
+      message:
+        "No punch-in record found for today"
+    });
+
+  }
+
+  if (
+    attendanceRecord[0].punch_out
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "Employee already punched out"
+    });
+
+  }
+
+  const punchInTime =
+    new Date(
+      attendanceRecord[0].punch_in
+    );
+
+  const punchOutTime =
+    parsedTimestamp;
+
+  if (
+    punchOutTime <
+    punchInTime
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "Punch out time cannot be earlier than punch in time"
+    });
+
+  }
+
+  const workingHours =
+    (
+      (
+        punchOutTime -
+        punchInTime
+      ) /
+      (
+        1000 *
+        60 *
+        60
+      )
+    ).toFixed(2);
+
+  const overtimeHours =
+    Math.max(
+      0,
+      Number(workingHours) - 8
+    );
+
+  const officeEndHour = 18;
+
+  const earlyDeparture =
+    getLocalHour(punchOutTime)
+    < officeEndHour;
+
+  
+  await pool.query(
+    `
+    UPDATE attendance
+    SET
+      punch_out = ?,
+      working_hours = ?,
+      overtime_hours = ?,
+      early_departure = ?
+    WHERE employee_id = ?
+    AND attendance_date = ?
+    `,
+    [
+      timestamp,
+      workingHours,
+      overtimeHours,
+      earlyDeparture,
+      employeeId,
+      attendanceDate
+    ]
+  );
+
+  await publishEvent(
+    "attendance.punchout",
+    {
+      employeeId,
+      timestamp,
+      workingHours,
+      overtimeHours
+    }
+  );
+
+  res.json({
+    success: true,
+    message:
+      "Punch Out Successful",
+    workingHours,
+    overtimeHours,
+    earlyDeparture
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.getAttendanceHistory =
+async (req, res) => {
+
+
+try {
+
+  const {
+    employeeId
+  } = req.params;
+
+  const page =
+    parseInt(
+      req.query.page
+    ) || 1;
+
+  const limit =
+    parseInt(
+      req.query.limit
+    ) || 10;
+
+  const offset =
+    (page - 1) * limit;
+
+  const [rows] =
+    await pool.query(
+      `
+      SELECT *
+      FROM attendance
+      WHERE employee_id = ?
+      ORDER BY attendance_date DESC
+      LIMIT ?
+      OFFSET ?
+      `,
+      [
+        employeeId,
+        limit,
+        offset
+      ]
+    );
+
+  res.json({
+    success: true,
+    page,
+    limit,
+    data: rows
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.getAttendanceByDate =
+async (req, res) => {
+
+
+try {
+
+  const { date } =
+    req.params;
+
+  const [rows] =
+    await pool.query(
+      `
+      SELECT *
+      FROM attendance
+      WHERE attendance_date = ?
+      `,
+      [date]
+    );
+
+  res.json({
+    success: true,
+    data: rows
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.getMonthlyAttendance =
+async (req, res) => {
+
+
+try {
+
+  const {
+    employeeId
+  } = req.params;
+
+  const [rows] =
+    await pool.query(
+      `
+      SELECT *
+      FROM attendance
+      WHERE employee_id = ?
+      AND MONTH(attendance_date)
+        = MONTH(CURDATE())
+      AND YEAR(attendance_date)
+        = YEAR(CURDATE())
+      ORDER BY attendance_date DESC
+      `,
+      [employeeId]
+    );
+
+  res.json({
+    success: true,
+    data: rows
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.getAttendanceSummary =
+async (req, res) => {
+
+
+try {
+
+  const {
+    employeeId
+  } = req.params;
+
+  const [rows] =
+    await pool.query(
+      `
+      SELECT
+        COUNT(
+          DISTINCT attendance_date
+        ) AS totalDays,
+        COALESCE(
+          SUM(
+            working_hours
+          ),
+          0
+        ) AS totalHours
+      FROM attendance
+      WHERE employee_id = ?
+      `,
+      [employeeId]
+    );
+
+  res.json({
+    success: true,
+    data: {
+      employeeId,
+      totalDays:
+        rows[0].totalDays,
+      totalHours:
+        rows[0].totalHours
+    }
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.getAttendanceReport =
+async (req, res) => {
+
+
+try {
+
+  const {
+    employeeId
+  } = req.params;
+
+  const {
+    startDate,
+    endDate
+  } = req.query;
+
+  if (
+    !startDate ||
+    !endDate
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "startDate and endDate are required"
+    });
+
+  }
+
+  const [rows] =
+    await pool.query(
+      `
+      SELECT *
+      FROM attendance
+      WHERE employee_id = ?
+      AND attendance_date
+      BETWEEN ? AND ?
+      ORDER BY attendance_date
+      `,
+      [
+        employeeId,
+        startDate,
+        endDate
+      ]
+    );
+
+  res.json({
+    success: true,
+    data: rows
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.getDashboard =
+async (req, res) => {
+
+
+try {
+
+  const {
+    employeeId
+  } = req.params;
+
+  // 1. Fetch employee name from database
+  const [employee] = await pool.query(
+    "SELECT name FROM employees WHERE employee_id = ?",
+    [employeeId]
+  );
+  const employeeName = employee.length > 0 ? employee[0].name : "Employee";
+
+  // 2. Fetch statistics
+  const [rows] =
+    await pool.query(
+      `
+      SELECT
+        COUNT(*) AS presentDays,
+
+        SUM(
+          CASE
+            WHEN is_late = TRUE
+            THEN 1
+            ELSE 0
+          END
+        ) AS lateDays,
+
+        COALESCE(
+          SUM(working_hours),
+          0
+        ) AS totalHours,
+
+        COALESCE(
+          SUM(overtime_hours),
+          0
+        ) AS overtimeHours,
+
+        SUM(
+          CASE
+            WHEN early_departure = TRUE
+            THEN 1
+            ELSE 0
+          END
+        ) AS earlyDepartureDays
+
+      FROM attendance
+      WHERE employee_id = ?
+      `,
+      [employeeId]
+    );
+
+  const stats = rows[0] || {};
+  const presentDays = stats.presentDays || 0;
+  const totalDays = 22; // default denominator in frontend Dashboard.jsx
+  const absentDays = Math.max(0, totalDays - presentDays);
+  const totalHours = Number(stats.totalHours) || 0;
+  const attendancePercentage = totalDays > 0 ? Math.min(100, Math.round((presentDays / totalDays) * 100)) : 0;
+
+  // 3. Check if checked in today
+  const todayDate = getLocalDateString(new Date());
+
+  const [currentSession] = await pool.query(
+    `
+    SELECT *
+    FROM attendance
+    WHERE employee_id = ?
+    AND attendance_date = ?
+    `,
+    [employeeId, todayDate]
+  );
+
+  const isCheckedIn = currentSession.length > 0 && currentSession[0].punch_out === null;
+
+  // 4. Calculate live duration for active session
+  let activeDuration = "00:00:00";
+  if (isCheckedIn && currentSession[0].punch_in) {
+    const punchInTime = new Date(currentSession[0].punch_in);
+    const now = new Date();
+    const diffMs = now - punchInTime;
+    if (diffMs > 0) {
+      const diffSecs = Math.floor(diffMs / 1000);
+      const secs = diffSecs % 60;
+      const mins = Math.floor(diffSecs / 60) % 60;
+      const hrs = Math.floor(diffSecs / 3600);
+      activeDuration = [
+        String(hrs).padStart(2, "0"),
+        String(mins).padStart(2, "0"),
+        String(secs).padStart(2, "0")
+      ].join(":");
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      employeeName,
+      presentDays,
+      totalDays,
+      absentDays,
+      totalHours,
+      attendancePercentage,
+      isCheckedIn,
+      activeDuration,
+      lateDays: stats.lateDays || 0,
+      overtimeHours: stats.overtimeHours || 0,
+      earlyDepartureDays: stats.earlyDepartureDays || 0
+    }
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.getAlerts = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const [rows] = await pool.query(
+      `
+      SELECT COUNT(*) AS lateDays
+      FROM attendance
+      WHERE employee_id = ?
+      AND is_late = TRUE
+      `,
+      [employeeId]
+    );
+
+    const lateDays = rows[0]?.lateDays || 0;
+    const alerts = [];
+
+    if (lateDays > 0) {
+      alerts.push({
+        type: "warning",
+        title: "Late Attendance Warning",
+        description: `You have been late ${lateDays} times this period. Please adhere to office hours (09:00 AM).`,
+        date: getLocalDateString(new Date())
+      });
+    }
 
     res.json({
       success: true,
-      message:
-        "Punch Out Successful",
-      workingHours
+      alerts
     });
-
   } catch (error) {
-
     console.error(error);
-
     res.status(500).json({
       success: false,
-      message:
-        error.message
+      message: error.message
     });
   }
 };
 
-exports.getAttendanceHistory =
-  async (req, res) => {
+exports.getLateAttendanceCount =
+async (req, res) => {
 
-    try {
 
-      const {
-        employeeId
-      } = req.params;
+try {
 
-      const [rows] =
+  const {
+    employeeId
+  } = req.params;
+
+  const [rows] =
+    await pool.query(
+      `
+      SELECT COUNT(*) AS lateDays
+      FROM attendance
+      WHERE employee_id = ?
+      AND is_late = TRUE
+      `,
+      [employeeId]
+    );
+
+  res.json({
+    success: true,
+    lateDays:
+      rows[0].lateDays
+  });
+
+} catch (error) {
+
+  console.error(error);
+
+  res.status(500).json({
+    success: false,
+    message:
+      error.message
+  });
+
+}
+
+
+};
+
+exports.updateAttendance = async (req, res) => {
+  try {
+    const { employeeId, date, punchIn, punchOut, status } = req.body;
+    
+    // Get existing record
+    const [existing] = await pool.query(
+      `SELECT * FROM attendance WHERE employee_id = ? AND attendance_date = ?`,
+      [employeeId, date]
+    );
+
+    if (status === "Absent") {
+      if (existing.length > 0) {
         await pool.query(
-          `
-          SELECT *
-          FROM attendance
-          WHERE employee_id = ?
-          ORDER BY attendance_date DESC
-          `,
-          [employeeId]
+          `DELETE FROM attendance WHERE employee_id = ? AND attendance_date = ?`,
+          [employeeId, date]
         );
-
-      res.json({
-        success: true,
-        data: rows
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        success: false,
-        message:
-          error.message
-      });
+      }
+      return res.json({ success: true, message: "Attendance updated to Absent" });
     }
-  };
 
-exports.getAttendanceByDate =
-  async (req, res) => {
+    // Determine values for checkin and checkout
+    let formattedPunchIn = null;
+    let formattedPunchOut = null;
+    
+    const getFormattedDateTime = (timeStr) => {
+      if (!timeStr || timeStr === "--:-- --" || timeStr === "—") return null;
+      if (timeStr.includes("T") || (timeStr.includes("-") && timeStr.includes(":"))) {
+        return timeStr.replace("T", " ").substring(0, 19);
+      }
+      
+      let hours = 0;
+      let minutes = 0;
+      
+      const cleanTime = timeStr.trim();
+      if (cleanTime.toLowerCase().includes("am") || cleanTime.toLowerCase().includes("pm")) {
+        const parts = cleanTime.split(/\s+/);
+        const timeParts = parts[0].split(":");
+        hours = parseInt(timeParts[0]);
+        minutes = parseInt(timeParts[1] || 0);
+        const ampm = parts[1].toLowerCase();
+        if (ampm === "pm" && hours < 12) hours += 12;
+        if (ampm === "am" && hours === 12) hours = 0;
+      } else {
+        const timeParts = cleanTime.split(":");
+        hours = parseInt(timeParts[0]);
+        minutes = parseInt(timeParts[1] || 0);
+      }
+      
+      const dateObj = new Date(`${date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30`);
+      if (isNaN(dateObj.getTime())) return null;
 
-    try {
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      const hh = String(dateObj.getHours()).padStart(2, '0');
+      const mm = String(dateObj.getMinutes()).padStart(2, '0');
+      const ss = String(dateObj.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hh}:${mm}:${ss}`;
+    };
 
-      const { date } =
-        req.params;
+    if (punchIn) formattedPunchIn = getFormattedDateTime(punchIn);
+    if (punchOut) formattedPunchOut = getFormattedDateTime(punchOut);
 
-      const [rows] =
-        await pool.query(
-          `
-          SELECT *
-          FROM attendance
-          WHERE attendance_date = ?
-          `,
-          [date]
-        );
-
-      res.json({
-        success: true,
-        data: rows
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        success: false,
-        message:
-          error.message
-      });
+    let workingHours = 0;
+    if (formattedPunchIn && formattedPunchOut) {
+      const pin = new Date(formattedPunchIn.replace(" ", "T") + "+05:30");
+      const pout = new Date(formattedPunchOut.replace(" ", "T") + "+05:30");
+      if (!isNaN(pin.getTime()) && !isNaN(pout.getTime())) {
+        workingHours = ((pout - pin) / (1000 * 60 * 60)).toFixed(2);
+      }
     }
-  };
 
-exports.getMonthlyAttendance =
-  async (req, res) => {
-
-    try {
-
-      const {
-        employeeId
-      } = req.params;
-
-      const [rows] =
-        await pool.query(
-          `
-          SELECT *
-          FROM attendance
-          WHERE employee_id = ?
-          ORDER BY attendance_date DESC
-          LIMIT 30
-          `,
-          [employeeId]
-        );
-
-      res.json({
-        success: true,
-        data: rows
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        success: false,
-        message:
-          error.message
-      });
+    if (existing.length > 0) {
+      await pool.query(
+        `UPDATE attendance
+         SET punch_in = ?, punch_out = ?, working_hours = ?
+         WHERE employee_id = ? AND attendance_date = ?`,
+        [formattedPunchIn, formattedPunchOut, workingHours, employeeId, date]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO attendance (employee_id, punch_in, punch_out, working_hours, attendance_date)
+         VALUES (?, ?, ?, ?, ?)`,
+        [employeeId, formattedPunchIn, formattedPunchOut, workingHours, date]
+      );
     }
-  };
 
-exports.getAttendanceSummary =
-  async (req, res) => {
-
-    try {
-
-      const {
-        employeeId
-      } = req.params;
-
-      const [rows] =
-        await pool.query(
-          `
-          SELECT
-            COUNT(*) AS totalDays,
-            COALESCE(
-              SUM(working_hours),
-              0
-            ) AS totalHours
-          FROM attendance
-          WHERE employee_id = ?
-          `,
-          [employeeId]
-        );
-
-      res.json({
-        success: true,
-        data: {
-          employeeId,
-          totalDays:
-            rows[0].totalDays,
-          totalHours:
-            rows[0].totalHours
-        }
-      });
-
-    } catch (error) {
-
-      console.error(error);
-
-      res.status(500).json({
-        success: false,
-        message:
-          error.message
-      });
-    }
-  };
-
-
-
-
+    res.json({ success: true, message: "Attendance updated successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 
 
