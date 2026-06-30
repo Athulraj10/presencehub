@@ -4,7 +4,8 @@ import {
   Bell, Search, Filter, MoreVertical, Download, Plus, 
   X, Mail, Lock, Eye, EyeOff, GitBranch, Calendar, Clock,
   ArrowRight, Check, Trash2, LogOut, User, ShieldCheck,
-  FileText, HelpCircle, KeyRound, Phone, MapPin, Edit, XCircle
+  FileText, HelpCircle, KeyRound, Phone, MapPin, Edit, XCircle,
+  Settings
 } from "lucide-react";
 import api from "../services/api";
 import attendanceApi from "../services/attendanceApi";
@@ -12,12 +13,34 @@ import ChangePassword from "./ChangePassword";
 import ReportIssue from "./ReportIssue";
 import "../HRDashboard.css";
 
-function HRDashboard() {
+function HRDashboard({ onViewMyAttendance }) {
   const employeeId = localStorage.getItem("employeeId");
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
   // Subview State (for full screen subviews: Change Password / Report Issue)
-  const [subView, setSubView] = useState(null); // 'change-password' | 'report-issue'
+  const [subView, setSubView] = useState(null); // 'change-password' | 'report-issue' | 'system-settings'
+
+  // --- HR System & Geofence States ---
+  const [breachThreshold, setBreachThreshold] = useState(localStorage.getItem("hr_breach_threshold") || "10");
+  const [radiusBuffer, setRadiusBuffer] = useState(localStorage.getItem("hr_radius_buffer") || "0");
+  const [quietHoursStart, setQuietHoursStart] = useState(localStorage.getItem("hr_quiet_hours_start") || "19:00");
+  const [quietHoursEnd, setQuietHoursEnd] = useState(localStorage.getItem("hr_quiet_hours_end") || "08:00");
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(localStorage.getItem("hr_quiet_hours_enabled") === "true");
+
+  // --- HR Personal Preference States ---
+  const [theme, setTheme] = useState(localStorage.getItem("pref_theme") || "light");
+  const [language, setLanguage] = useState(localStorage.getItem("pref_lang") || "en");
+  const [notifyBreach, setNotifyBreach] = useState(localStorage.getItem("hr_notify_breach") !== "false");
+  const [notifyReg, setNotifyReg] = useState(localStorage.getItem("hr_notify_reg") !== "false");
+  const [notifyReport, setNotifyReport] = useState(localStorage.getItem("hr_notify_report") !== "false");
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.body.classList.add("dark-theme");
+    } else {
+      document.body.classList.remove("dark-theme");
+    }
+  }, [theme]);
 
   // --- Custom Alert Modal States ---
   const [modalOpen, setModalOpen] = useState(false);
@@ -512,6 +535,268 @@ function HRDashboard() {
     return <ReportIssue goBack={() => setSubView(null)} currentUser={currentUser} />;
   }
 
+  if (subView === "system-settings") {
+    return (
+      <div className="subview-container">
+        <header className="subview-header">
+          <button className="back-btn" onClick={() => setSubView(null)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}>
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>Back to HR Portal</span>
+          </button>
+          <h2>System & Geofence Settings</h2>
+        </header>
+
+        <div className="settings-content-card">
+          {/* Section 1: Geofence Threshold */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              Geofence Alert Trigger Delay
+            </h3>
+            <div className="settings-field">
+              <div className="field-info">
+                <span className="field-label">Breach Warning Limit</span>
+                <span className="field-desc">How long an employee must be outside the geofence perimeter before a warning and breach log are registered.</span>
+              </div>
+              <select 
+                className="settings-select"
+                value={breachThreshold}
+                onChange={(e) => {
+                  setBreachThreshold(e.target.value);
+                  localStorage.setItem("hr_breach_threshold", e.target.value);
+                  showCustomModal("Settings Saved", `Geofence warning delay limit updated to ${e.target.value} minutes.`, "success");
+                }}
+              >
+                <option value="2">2 Minutes</option>
+                <option value="5">5 Minutes</option>
+                <option value="10">10 Minutes (Default)</option>
+                <option value="15">15 Minutes</option>
+                <option value="30">30 Minutes</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Section 2: Radius Tolerance */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="4" />
+              </svg>
+              Office Boundary Tolerance (Radius Buffer)
+            </h3>
+            <div className="settings-field" style={{ flexDirection: "column", alignItems: "stretch", gap: "12px" }}>
+              <div className="field-info" style={{ maxWidth: "100%" }}>
+                <span className="field-label">Radius Buffer Allowance ({radiusBuffer} meters)</span>
+                <span className="field-desc">Provide extra tolerance in meters beyond the core geofence boundaries to account for GPS drift and inaccuracies.</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "8px" }}>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={radiusBuffer} 
+                  style={{ flex: 1, height: "6px", cursor: "pointer" }}
+                  onChange={(e) => {
+                    setRadiusBuffer(e.target.value);
+                    localStorage.setItem("hr_radius_buffer", e.target.value);
+                  }} 
+                />
+                <span style={{ fontSize: "14px", fontWeight: "600", width: "40px", textAlign: "right" }}>{radiusBuffer}m</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Quiet Hours Scheduler */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              Quiet Hours Scheduler
+            </h3>
+            <div className="settings-field">
+              <div className="field-info">
+                <span className="field-label">Enable Quiet Hours Pause</span>
+                <span className="field-desc">Pause geofence checks and notification tracking during off-work hours automatically.</span>
+              </div>
+              <label className="switch-label">
+                <input 
+                  type="checkbox" 
+                  checked={quietHoursEnabled} 
+                  onChange={(e) => {
+                    setQuietHoursEnabled(e.target.checked);
+                    localStorage.setItem("hr_quiet_hours_enabled", String(e.target.checked));
+                  }} 
+                />
+                <span className="switch-slider"></span>
+              </label>
+            </div>
+            
+            {quietHoursEnabled && (
+              <div style={{ display: "flex", gap: "16px", marginTop: "16px", background: "rgba(0,0,0,0.02)", padding: "16px", borderRadius: "10px" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "600", color: "#64748b" }}>START PAUSE TIME</span>
+                  <input 
+                    type="time" 
+                    className="settings-select"
+                    style={{ width: "100%", minWidth: "auto" }}
+                    value={quietHoursStart}
+                    onChange={(e) => {
+                      setQuietHoursStart(e.target.value);
+                      localStorage.setItem("hr_quiet_hours_start", e.target.value);
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "600", color: "#64748b" }}>RESUME TIME</span>
+                  <input 
+                    type="time" 
+                    className="settings-select"
+                    style={{ width: "100%", minWidth: "auto" }}
+                    value={quietHoursEnd}
+                    onChange={(e) => {
+                      setQuietHoursEnd(e.target.value);
+                      localStorage.setItem("hr_quiet_hours_end", e.target.value);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 4: Personal Appearance */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+              Appearance & Theme
+            </h3>
+            <div className="settings-field">
+              <div className="field-info">
+                <span className="field-label">Dark Mode</span>
+                <span className="field-desc">Switch between light and dark themes for the HR Portal management interface.</span>
+              </div>
+              <label className="switch-label">
+                <input 
+                  type="checkbox" 
+                  checked={theme === "dark"} 
+                  onChange={(e) => {
+                    const newTheme = e.target.checked ? "dark" : "light";
+                    setTheme(newTheme);
+                    localStorage.setItem("pref_theme", newTheme);
+                  }} 
+                />
+                <span className="switch-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 5: HR Alerts & Reports */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              HR Notifications & Subscriptions
+            </h3>
+            <div className="settings-field checkbox-field">
+              <label className="checkbox-container">
+                <input 
+                  type="checkbox" 
+                  checked={notifyBreach} 
+                  onChange={(e) => {
+                    setNotifyBreach(e.target.checked);
+                    localStorage.setItem("hr_notify_breach", String(e.target.checked));
+                  }} 
+                />
+                <span className="checkbox-text">
+                  <strong>Geofence Breach Alerts</strong>
+                  <span className="field-desc">Notify me in real-time if any employee stays outside the boundary past their limit.</span>
+                </span>
+              </label>
+            </div>
+            <div className="settings-field checkbox-field">
+              <label className="checkbox-container">
+                <input 
+                  type="checkbox" 
+                  checked={notifyReg} 
+                  onChange={(e) => {
+                    setNotifyReg(e.target.checked);
+                    localStorage.setItem("hr_notify_reg", String(e.target.checked));
+                  }} 
+                />
+                <span className="checkbox-text">
+                  <strong>Employee Registration Alerts</strong>
+                  <span className="field-desc">Notify me when a new employee account is registered in the Identity service.</span>
+                </span>
+              </label>
+            </div>
+            <div className="settings-field checkbox-field">
+              <label className="checkbox-container">
+                <input 
+                  type="checkbox" 
+                  checked={notifyReport} 
+                  onChange={(e) => {
+                    setNotifyReport(e.target.checked);
+                    localStorage.setItem("hr_notify_report", String(e.target.checked));
+                  }} 
+                />
+                <span className="checkbox-text">
+                  <strong>Daily Workforce Summary</strong>
+                  <span className="field-desc">Receive a daily breakdown report of total present, late, and absent employees.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 6: Language Selection */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              Regional & Language
+            </h3>
+            <div className="settings-field">
+              <div className="field-info">
+                <span className="field-label">Portal Locale</span>
+                <span className="field-desc">Configure language preferences for titles and tables in the HR Portal.</span>
+              </div>
+              <select 
+                className="settings-select"
+                value={language}
+                onChange={(e) => {
+                  setLanguage(e.target.value);
+                  localStorage.setItem("pref_lang", e.target.value);
+                  showCustomModal("Preferences Saved", `Portal language changed to ${e.target.value.toUpperCase()} successfully.`, "success");
+                }}
+              >
+                <option value="en">English (US)</option>
+                <option value="es">Español (ES)</option>
+                <option value="hi">हिन्दी (IN)</option>
+                <option value="de">Deutsch (DE)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="hr-dashboard-layout">
       {/* 1. APP NAVIGATION BAR */}
@@ -554,6 +839,13 @@ function HRDashboard() {
               <Bell className="btn-icon" />
               <span className="hr-notification-dot"></span>
             </button>
+            <button 
+              className="hr-util-btn"
+              title="System Settings"
+              onClick={() => setSubView("system-settings")}
+            >
+              <Settings className="btn-icon" />
+            </button>
 
             {/* Profile Avatar */}
             <div className="hr-user-badge relative">
@@ -578,6 +870,11 @@ function HRDashboard() {
                       onClick={() => { setShowProfileDropdown(false); setSubView("change-password"); }}
                     >
                       Change Password
+                    </button>
+                    <button 
+                      onClick={() => { setShowProfileDropdown(false); setSubView("system-settings"); }}
+                    >
+                      System Settings
                     </button>
                     <div className="border-t border-slate-100 my-1"></div>
                     <button 
@@ -616,9 +913,7 @@ function HRDashboard() {
 
   <button
     className="hr-btn-primary"
-    onClick={() => {
-      alert("My Attendance page will be connected after routing is implemented.");
-    }}
+    onClick={onViewMyAttendance}
   >
     My Attendance
   </button>

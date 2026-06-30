@@ -14,11 +14,16 @@ function App() {
     localStorage.getItem("role") || ""
   );
 
+  const [viewMode, setViewMode] = useState(
+    localStorage.getItem("role") || ""
+  );
+
   const [showForgotPassword, setShowForgotPassword] =
     useState(false);
 
   const handleLogin = (userRole) => {
     setRole(userRole);
+    setViewMode(userRole);
     setLoggedIn(true);
   };
 
@@ -37,8 +42,16 @@ function App() {
         localStorage.getItem("role") === "admin" ? (
           <AdminDashboard />
         ) : localStorage.getItem("role") === "hr" ? (
-
-          <HRDashboard />
+          viewMode === "employee" ? (
+            <EmployeeDashboard 
+              onViewHRPortal={() => setViewMode("hr")} 
+              showHRPortalLink={true} 
+            />
+          ) : (
+            <HRDashboard 
+              onViewMyAttendance={() => setViewMode("employee")} 
+            />
+          )
         ) : (
           <EmployeeDashboard />
         )

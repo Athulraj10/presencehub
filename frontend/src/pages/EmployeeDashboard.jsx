@@ -5,7 +5,7 @@ import "../employee.css";
 import ChangePassword from "./ChangePassword";
 import ReportIssue from "./ReportIssue";
 
-function EmployeeDashboard() {
+function EmployeeDashboard({ onViewHRPortal, showHRPortalLink }) {
   const employeeId = localStorage.getItem("employeeId");
   const token = localStorage.getItem("token");
 
@@ -13,6 +13,22 @@ function EmployeeDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [subView, setSubView] = useState(null);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+
+  // --- Settings States ---
+  const [theme, setTheme] = useState(localStorage.getItem("pref_theme") || "light");
+  const [notifyLate, setNotifyLate] = useState(localStorage.getItem("pref_notify_late") !== "false");
+  const [notifyShift, setNotifyShift] = useState(localStorage.getItem("pref_notify_shift") !== "false");
+  const [notifyReport, setNotifyReport] = useState(localStorage.getItem("pref_notify_report") !== "false");
+  const [pauseOnBreak, setPauseOnBreak] = useState(localStorage.getItem("pref_pause_break") === "true");
+  const [language, setLanguage] = useState(localStorage.getItem("pref_lang") || "en");
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.body.classList.add("dark-theme");
+    } else {
+      document.body.classList.remove("dark-theme");
+    }
+  }, [theme]);
 
   const getInitials = (name) => {
     if (!name) return "";
@@ -353,6 +369,18 @@ function EmployeeDashboard() {
     let interval = null;
     if (isCheckedIn) {
       const sendLocationPing = async () => {
+        // If pauseOnBreak is enabled, check if the current time is during lunch break (12:00 PM - 1:00 PM)
+        if (pauseOnBreak) {
+          const now = new Date();
+          const hours = now.getHours();
+          if (hours === 12) {
+            console.log("Geofence tracking paused during lunch break (12:00 PM - 1:00 PM)");
+            setIsInsideRadius(true);
+            fetchDashboardData();
+            return;
+          }
+        }
+
         const clickTimestamp = getCurrentTimestamp();
         const performPing = async (lat, lng) => {
           try {
@@ -391,6 +419,10 @@ function EmployeeDashboard() {
               console.warn("Background geolocation failed, using office fallback:", error.message);
               performPing(8.56037031, 76.88028618);
             },
+            (error) => {
+              console.warn("Background geolocation failed, using office fallback:", error.message);
+              performPing(8.56037031, 76.88028618);
+            },
             { enableHighAccuracy: true, timeout: 5000 }
           );
         } else {
@@ -410,7 +442,7 @@ function EmployeeDashboard() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isCheckedIn, simulateOutside, employeeId]);
+  }, [isCheckedIn, simulateOutside, employeeId, pauseOnBreak]);
 
   // --- Dynamic Interactive Punch Events ---
   const handlePunchIn = async () => {
@@ -631,6 +663,172 @@ function EmployeeDashboard() {
     return <ReportIssue goBack={() => setSubView(null)} currentUser={profileData} />;
   }
 
+  if (subView === "account-settings") {
+    return (
+      <div className="subview-container">
+        <header className="subview-header">
+          <button className="back-btn" onClick={() => setSubView(null)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}>
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>Back to Dashboard</span>
+          </button>
+          <h2>Account Settings & Preferences</h2>
+        </header>
+        
+        <div className="settings-content-card">
+          {/* Section 1: Appearance */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+              Appearance & Theme
+            </h3>
+            <div className="settings-field">
+              <div className="field-info">
+                <span className="field-label">Dark Mode</span>
+                <span className="field-desc">Switch between light and dark themes for the entire dashboard layout.</span>
+              </div>
+              <label className="switch-label">
+                <input 
+                  type="checkbox" 
+                  checked={theme === "dark"} 
+                  onChange={(e) => {
+                    const newTheme = e.target.checked ? "dark" : "light";
+                    setTheme(newTheme);
+                    localStorage.setItem("pref_theme", newTheme);
+                  }} 
+                />
+                <span className="switch-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 2: Notifications */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              Notification Subscriptions
+            </h3>
+            <div className="settings-field checkbox-field">
+              <label className="checkbox-container">
+                <input 
+                  type="checkbox" 
+                  checked={notifyLate} 
+                  onChange={(e) => {
+                    setNotifyLate(e.target.checked);
+                    localStorage.setItem("pref_notify_late", String(e.target.checked));
+                  }} 
+                />
+                <span className="checkbox-text">
+                  <strong>Late Attendance Warnings</strong>
+                  <span className="field-desc">Alert me immediately if my check-in is logged as late.</span>
+                </span>
+              </label>
+            </div>
+            <div className="settings-field checkbox-field">
+              <label className="checkbox-container">
+                <input 
+                  type="checkbox" 
+                  checked={notifyShift} 
+                  onChange={(e) => {
+                    setNotifyShift(e.target.checked);
+                    localStorage.setItem("pref_notify_shift", String(e.target.checked));
+                  }} 
+                />
+                <span className="checkbox-text">
+                  <strong>Shift Reminders</strong>
+                  <span className="field-desc">Notify me 15 minutes before my scheduled shift starts.</span>
+                </span>
+              </label>
+            </div>
+            <div className="settings-field checkbox-field">
+              <label className="checkbox-container">
+                <input 
+                  type="checkbox" 
+                  checked={notifyReport} 
+                  onChange={(e) => {
+                    setNotifyReport(e.target.checked);
+                    localStorage.setItem("pref_notify_report", String(e.target.checked));
+                  }} 
+                />
+                <span className="checkbox-text">
+                  <strong>Weekly Hours Summary</strong>
+                  <span className="field-desc">Receive a weekly digest email of my total logged working hours.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 3: Geofence Control */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <path d="M12 2a10 10 0 0 0-10 10c0 5.25 10 12 10 12s10-6.75 10-12a10 10 0 0 0-10-10z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              Geofence & Tracking
+            </h3>
+            <div className="settings-field">
+              <div className="field-info">
+                <span className="field-label">Pause Geofencing on Lunch Break</span>
+                <span className="field-desc">Temporarily pause tracking and ignore boundary breaches between 12:00 PM and 1:00 PM.</span>
+              </div>
+              <label className="switch-label">
+                <input 
+                  type="checkbox" 
+                  checked={pauseOnBreak} 
+                  onChange={(e) => {
+                    setPauseOnBreak(e.target.checked);
+                    localStorage.setItem("pref_pause_break", String(e.target.checked));
+                  }} 
+                />
+                <span className="switch-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 4: Localization */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18, marginRight: 8, color: "#2563eb" }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              Regional & Language
+            </h3>
+            <div className="settings-field">
+              <div className="field-info">
+                <span className="field-label">System Language</span>
+                <span className="field-desc">Choose your preferred locale for dashboard titles and stats.</span>
+              </div>
+              <select 
+                className="settings-select"
+                value={language}
+                onChange={(e) => {
+                  setLanguage(e.target.value);
+                  localStorage.setItem("pref_lang", e.target.value);
+                  showCustomModal("Settings Updated", `System language updated to ${e.target.value.toUpperCase()} successfully.`, "success");
+                }}
+              >
+                <option value="en">English (US)</option>
+                <option value="es">Español (ES)</option>
+                <option value="hi">हिन्दी (IN)</option>
+                <option value="de">Deutsch (DE)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="dashboard-loading-screen">
@@ -685,13 +883,23 @@ function EmployeeDashboard() {
             >
               Profile
             </a>
+            {showHRPortalLink && (
+              <a 
+                href="#hr-portal" 
+                className="hr-portal-link"
+                style={{ color: "#2563eb", fontWeight: "600", marginLeft: "12px" }}
+                onClick={(e) => { e.preventDefault(); onViewHRPortal(); }}
+              >
+                HR Portal
+              </a>
+            )}
           </nav>
           <div className="dash-utils">
             <button className="util-btn relative-btn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="nav-icon"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /></svg>
               {alerts.length > 0 && <span className="notification-dot"></span>}
             </button>
-            <button className="util-btn">
+            <button className="util-btn" onClick={() => setSubView("account-settings")} title="Preferences & Settings">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="nav-icon"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
             </button>
             <div className="relative inline-block text-left">
@@ -722,6 +930,15 @@ function EmployeeDashboard() {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
                       <span>Change Password</span>
                     </button>
+                    {showHRPortalLink && (
+                      <button 
+                        onClick={() => { setShowProfileDropdown(false); onViewHRPortal(); }}
+                        className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50/50 transition-colors flex items-center gap-2 font-medium"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-blue-500"><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
+                        <span>Back to HR Portal</span>
+                      </button>
+                    )}
                     <div className="border-t border-slate-100 my-1"></div>
                     <button 
                       onClick={handleLogout}
@@ -1240,13 +1457,13 @@ function EmployeeDashboard() {
                           <polyline points="9 18 15 12 9 6" />
                         </svg>
                       </div>
-                      <div className="settings-item" onClick={() => showCustomModal("Access Restricted", "Notification Settings are managed by HR System.", "info")}>
+                      <div className="settings-item" onClick={() => setSubView("account-settings")}>
                         <div className="settings-item-left">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="settings-icon" style={{ width: 18, height: 18 }}>
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                           </svg>
-                          <span>Notification Settings</span>
+                          <span>Preferences & Settings</span>
                         </div>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="settings-chevron" style={{ width: 16, height: 16 }}>
                           <polyline points="9 18 15 12 9 6" />
