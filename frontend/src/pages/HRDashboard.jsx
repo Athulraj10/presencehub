@@ -4,7 +4,8 @@ import {
   Bell, Search, Filter, MoreVertical, Download, Plus, 
   X, Mail, Lock, Eye, EyeOff, GitBranch, Calendar, Clock,
   ArrowRight, Check, Trash2, LogOut, User, ShieldCheck,
-  FileText, HelpCircle, KeyRound, Phone, MapPin, Edit, XCircle
+  FileText, HelpCircle, KeyRound, Phone, MapPin, Edit, XCircle,
+  UploadCloud
 } from "lucide-react";
 import api from "../services/api";
 import attendanceApi from "../services/attendanceApi";
@@ -358,15 +359,26 @@ function HRDashboard() {
       alert("Passwords do not match!");
       return;
     }
+    if (!addHRPhoto) {
+      alert("Employee face photo is required");
+      return;
+    }
     try {
-      const res = await api.post("/employees/register", {
-        employeeId: addEmpForm.employeeId,
-        name: addEmpForm.name,
-        email: addEmpForm.email,
-        department: addEmpForm.department,
-        password: addEmpForm.password,
-        role: "employee"
-      }, { headers });
+      const formData = new FormData();
+      formData.append("employeeId", addEmpForm.employeeId);
+      formData.append("name", addEmpForm.name);
+      formData.append("email", addEmpForm.email);
+      formData.append("department", addEmpForm.department);
+      formData.append("password", addEmpForm.password);
+      formData.append("image", addHRPhoto);
+      formData.append("role", "employee");
+
+      const res = await api.post("/employees/register", formData, {
+        headers: {
+          ...headers,
+          "Content-Type": "multipart/form-data"
+        }
+      });
 
       if (res.data && res.data.success) {
         alert("Employee registered successfully!");
@@ -381,6 +393,7 @@ function HRDashboard() {
           password: "",
           confirmPassword: ""
         });
+        setAddHRPhoto(null);
         loadData();
       }
     } catch (err) {
