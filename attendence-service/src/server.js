@@ -10,13 +10,16 @@ const startEmployeeConsumer =
   require("./consumers/employeeConsumer");
 
 const PORT =
-  process.env.PORT || 3002;
+  process.env.PORT || 3001;
 
 async function startServices() {
 
   await connectRabbitMQ();
 
   startEmployeeConsumer();
+
+
+  require("./jobs/breachNotifier");
 
   app.listen(PORT, () => {
     console.log(
@@ -26,9 +29,3 @@ async function startServices() {
 }
 
 startServices();
-
-
-
-
-
-
