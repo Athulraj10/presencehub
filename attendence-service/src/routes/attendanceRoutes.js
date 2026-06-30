@@ -16,6 +16,11 @@ router.post(
 attendanceController.punchOut
 );
 
+router.put(
+"/update",
+attendanceController.updateAttendance
+);
+
 router.get(
 "/date/:date",
 attendanceController.getAttendanceByDate

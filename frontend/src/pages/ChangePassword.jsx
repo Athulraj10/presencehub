@@ -1,9 +1,8 @@
 import React, { useState } from "react";
-import { Mail, Lock, Shield, HelpCircle, Eye, EyeOff, RotateCcw, ArrowRight, ArrowLeft } from "lucide-react";
+import { Lock, Shield, HelpCircle, Eye, EyeOff, ArrowRight, ArrowLeft } from "lucide-react";
 import api from "../services/api";
 
-function ForgotPassword({ goBack }) {
-  const [email, setEmail] = useState("");
+function ChangePassword({ goBack, email }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -12,7 +11,7 @@ function ForgotPassword({ goBack }) {
 
   const handleReset = async (e) => {
     e.preventDefault();
-    if (!email || !newPassword || !confirmPassword) {
+    if (!newPassword || !confirmPassword) {
       alert("All fields are required");
       return;
     }
@@ -25,16 +24,23 @@ function ForgotPassword({ goBack }) {
       return;
     }
 
+    // Use current email, fallback to localStorage or user details
+    const targetEmail = email || localStorage.getItem("employeeEmail");
+    if (!targetEmail) {
+      alert("Unable to identify account email. Please login again.");
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await api.post("/employees/forgot-password", {
-        email,
+        email: targetEmail,
         newPassword,
       });
-      alert(response.data.message || "Password reset successful");
+      alert(response.data.message || "Password changed successfully");
       goBack();
     } catch (error) {
-      alert(error.response?.data?.message || "Reset Failed");
+      alert(error.response?.data?.message || "Change Failed");
     } finally {
       setLoading(false);
     }
@@ -56,39 +62,19 @@ function ForgotPassword({ goBack }) {
       {/* Main Container */}
       <div className="flex-1 flex items-center justify-center z-10 py-10">
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 max-w-[420px] w-full">
-          {/* Key Icon Circle */}
+          {/* Lock Icon Circle */}
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5">
-            <RotateCcw className="w-5 h-5" />
+            <span className="w-2.5 h-2.5 bg-blue-600 rounded-full"></span>
           </div>
 
           <h1 className="text-2xl font-semibold text-slate-900 text-center mb-1.5">
-            Forgot Password?
+            Change Password?
           </h1>
           <p className="text-sm text-slate-500 text-center mb-6 px-2 leading-relaxed">
             Enter your email and new password to reset your account access.
           </p>
 
           <form onSubmit={handleReset} className="space-y-4">
-            {/* Email Address */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
-                Email address
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
-                  <Mail className="w-5 h-5" />
-                </span>
-                <input
-                  type="email"
-                  required
-                  placeholder="name@company.com"
-                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-800 placeholder-slate-400 transition-shadow bg-white"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-            </div>
-
             {/* New Password */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
@@ -143,25 +129,25 @@ function ForgotPassword({ goBack }) {
               </div>
             </div>
 
-            {/* Reset Password Button */}
+            {/* Change Password Button */}
             <button
               type="submit"
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mt-2"
             >
-              <span>{loading ? "Resetting..." : "Reset Password"}</span>
+              <span>{loading ? "Changing..." : "Change Password"}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Back to Login Link */}
+          {/* Back Link */}
           <div className="mt-6 flex justify-center">
             <button
               onClick={goBack}
               className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Login</span>
+              <span>Back</span>
             </button>
           </div>
         </div>
@@ -180,4 +166,4 @@ function ForgotPassword({ goBack }) {
   );
 }
 
-export default ForgotPassword;
+export default ChangePassword;
