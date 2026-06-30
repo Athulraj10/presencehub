@@ -47,6 +47,50 @@ const getLocalDateString = (date) => {
   }).format(date);
 };
 
+const getWorkingDaysUpToToday = (startDate) => {
+  const today = new Date();
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const startLimit = startDate && new Date(startDate) > startOfMonth ? new Date(startDate) : startOfMonth;
+  
+  let workingDays = 0;
+  let current = new Date(startLimit);
+  current.setHours(0, 0, 0, 0);
+  const compareToday = new Date(today);
+  compareToday.setHours(23, 59, 59, 999);
+  
+  while (current <= compareToday) {
+    const day = current.getDay();
+    if (day !== 0 && day !== 6) { // Monday to Friday
+      workingDays++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  return workingDays;
+};
+
+const getTotalWorkingDaysInMonth = (startDate) => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const startLimit = startDate && new Date(startDate) > firstOfMonth ? new Date(startDate) : firstOfMonth;
+  const end = new Date(year, month + 1, 0); // Last day of month
+  
+  let workingDays = 0;
+  let current = new Date(startLimit);
+  current.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+  
+  while (current <= end) {
+    const day = current.getDay();
+    if (day !== 0 && day !== 6) {
+      workingDays++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  return workingDays;
+};
+
 const getLocalHour = (date) => {
   return parseInt(
     new Intl.DateTimeFormat("en-US", {
@@ -933,13 +977,17 @@ try {
   } = req.params;
 
   const [employee] = await pool.query(
-    "SELECT name FROM employees WHERE employee_id = ?",
+    "SELECT name, created_at FROM employees WHERE employee_id = ?",
     [employeeId]
   );
   const employeeName =
     employee.length > 0
       ? employee[0].name
       : "Employee";
+  const employeeCreatedAt =
+    employee.length > 0
+      ? employee[0].created_at
+      : null;
 
   const [rows] =
     await pool.query(
@@ -975,19 +1023,19 @@ try {
 
       FROM attendance
       WHERE employee_id = ?
+        AND YEAR(attendance_date) = ?
+        AND MONTH(attendance_date) = ?
       `,
-      [employeeId]
+      [
+        employeeId,
+        parseInt(getLocalDateString(new Date()).split("-")[0], 10),
+        parseInt(getLocalDateString(new Date()).split("-")[1], 10)
+      ]
     );
 
   const stats = rows[0] || {};
   const presentDays = stats.presentDays || 0;
-  const totalDays = 22;
-  const absentDays = Math.max(0, totalDays - presentDays);
   const totalHours = Number(stats.totalHours) || 0;
-  const attendancePercentage =
-    totalDays > 0
-      ? Math.min(100, Math.round((presentDays / totalDays) * 100))
-      : 0;
 
   const todayDate = getLocalDateString(new Date());
 
@@ -1000,6 +1048,24 @@ try {
     `,
     [employeeId, todayDate]
   );
+
+  const isCheckedInToday = currentSession.length > 0;
+  const totalDays = getTotalWorkingDaysInMonth(employeeCreatedAt);
+  let totalDaysElapsed = getWorkingDaysUpToToday(employeeCreatedAt);
+
+  // If today is a working day and the employee has NOT punched in yet today,
+  // exclude today from the elapsed days count (so they aren't marked absent for today).
+  const todayDayOfWeek = new Date().getDay();
+  const isTodayWorkingDay = todayDayOfWeek !== 0 && todayDayOfWeek !== 6;
+  if (isTodayWorkingDay && !isCheckedInToday) {
+    totalDaysElapsed = Math.max(0, totalDaysElapsed - 1);
+  }
+
+  const absentDays = Math.max(0, totalDaysElapsed - presentDays);
+  const attendancePercentage =
+    totalDaysElapsed > 0
+      ? Math.min(100, Math.round((presentDays / totalDaysElapsed) * 100))
+      : 0;
 
   const activeSession = currentSession.find(s => s.punch_out === null);
   const isCheckedIn = !!activeSession;

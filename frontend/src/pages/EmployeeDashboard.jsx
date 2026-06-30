@@ -5,13 +5,34 @@ import "../employee.css";
 import ChangePassword from "./ChangePassword";
 import ReportIssue from "./ReportIssue";
 
-function Dashboard() {
+function EmployeeDashboard() {
   const employeeId = localStorage.getItem("employeeId");
   const token = localStorage.getItem("token");
 
   // --- Tab Selection State ---
   const [activeTab, setActiveTab] = useState("dashboard");
   const [subView, setSubView] = useState(null);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+
+  const getInitials = (name) => {
+    if (!name) return "";
+    return name
+      .trim()
+      .split(/\s+/)
+      .map(p => p[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const getAvatarBg = (name) => {
+    const sum = (name || "").split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const colors = [
+      "bg-blue-600", "bg-emerald-600", "bg-violet-600", 
+      "bg-amber-600", "bg-rose-600", "bg-indigo-600"
+    ];
+    return colors[sum % colors.length];
+  };
 
   // --- Custom Alert Modal States ---
   const [modalOpen, setModalOpen] = useState(false);
@@ -493,8 +514,17 @@ function Dashboard() {
     const defaultStart = new Date();
     defaultStart.setDate(today.getDate() - 30);
     
-    const startLimit = appliedFromDate ? new Date(appliedFromDate) : defaultStart;
+    let startLimit = appliedFromDate ? new Date(appliedFromDate) : defaultStart;
     const endLimit = appliedToDate ? new Date(appliedToDate) : today;
+    
+    // Restrict history view range to start no earlier than when the employee was registered
+    if (profileData?.created_at) {
+      const hireDate = new Date(profileData.created_at);
+      hireDate.setHours(0, 0, 0, 0);
+      if (startLimit < hireDate) {
+        startLimit = hireDate;
+      }
+    }
     
     startLimit.setHours(0, 0, 0, 0);
     endLimit.setHours(23, 59, 59, 999);
@@ -664,9 +694,46 @@ function Dashboard() {
             <button className="util-btn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="nav-icon"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
             </button>
-            <button onClick={handleLogout} className="avatar-btn" title="Logout">
-              <img src="/employee_avatar.jpg" alt="Profile" />
-            </button>
+            <div className="relative inline-block text-left">
+              <button 
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)} 
+                className="avatar-btn" 
+                title="Profile Menu"
+              >
+                <div className={`w-full h-full text-white flex items-center justify-center text-sm font-bold ${getAvatarBg(profileData?.name || employeeName)}`}>
+                  {getInitials(profileData?.name || employeeName) || "EM"}
+                </div>
+              </button>
+              {showProfileDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowProfileDropdown(false)}></div>
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-50 text-left">
+                    <button 
+                      onClick={() => { setShowProfileDropdown(false); setActiveTab("profile"); }}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                      <span>View Profile</span>
+                    </button>
+                    <button 
+                      onClick={() => { setShowProfileDropdown(false); setSubView("change-password"); }}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                      <span>Change Password</span>
+                    </button>
+                    <div className="border-t border-slate-100 my-1"></div>
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50/50 transition-colors flex items-center gap-2"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-rose-500"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -721,23 +788,44 @@ function Dashboard() {
             {/* RADAR STRIP */}
             <div className="location-strip">
               <div className="loc-left">
-                <div className="loc-icon-bg">
+                <div className="loc-icon-bg" style={{ backgroundColor: isInsideRadius ? "#eef2ff" : "#fef2f2", color: isInsideRadius ? "#002366" : "#ef4444" }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="loc-icon">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
                 </div>
                 <div>
-                  <h4>Location: Office HQ</h4>
-                  <p>Inside Office Radius - Verified via Wi-Fi & GPS</p>
+                  <h4>Location: {isInsideRadius ? "Office HQ" : "Outside Geofence"}</h4>
+                  <p>{isInsideRadius ? "Inside Office Radius - Verified via Wi-Fi & GPS" : "Outside Office Radius - Breach Logged & Reported"}</p>
                 </div>
               </div>
-              <span className="verified-tag">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="check-icon">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                VERIFIED
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                {(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && (
+                  <button 
+                    onClick={() => setSimulateOutside(!simulateOutside)}
+                    className="custom-modal-btn"
+                    style={{ height: "32px", padding: "0 12px", fontSize: "11px", background: simulateOutside ? "#dc2626" : "#002366" }}
+                  >
+                    {simulateOutside ? "Simulating Outside" : "Simulate Outside"}
+                  </button>
+                )}
+                <span 
+                  className="verified-tag"
+                  style={!isInsideRadius ? { color: "#dc2626", background: "#fdf2f2", borderColor: "#fecaca" } : {}}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="check-icon">
+                    {isInsideRadius ? (
+                      <polyline points="20 6 9 17 4 12" />
+                    ) : (
+                      <>
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </>
+                    )}
+                  </svg>
+                  {isInsideRadius ? "VERIFIED" : "BREACHED"}
+                </span>
+              </div>
             </div>
 
             {/* 4 RECTANGULAR GRID CARDS */}
@@ -1235,8 +1323,7 @@ function Dashboard() {
 
                 {/* 5. Footer */}
                 <div className="profile-page-footer">
-                  <div className="profile-footer-version">PRESENCEHUB V4.2.1-ENTERPRISE</div>
-                  <div className="profile-footer-copyright">© 2026 PresenceHub Solutions. All rights reserved.</div>
+                  <div className="profile-footer-copyright">© 2024 PresenceHub Enterprise. All rights reserved.</div>
                 </div>
               </div>
             )}
@@ -1299,4 +1386,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard;
+export default EmployeeDashboard;
