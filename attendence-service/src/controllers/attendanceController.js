@@ -10,6 +10,8 @@ const {
   "../services/employeeService"
 );
 
+const FaceService = require("../services/faceService");
+
 const parseUTC = (ts) => {
   if (!ts) return new Date();
   if (ts.includes("T") || ts.endsWith("Z")) return new Date(ts);
@@ -57,6 +59,68 @@ try {
         "employeeId and timestamp required"
     });
 
+  }
+
+  // 1. Authenticate the employee using the existing JWT flow
+  if (req.user.employeeId !== employeeId) {
+    return res.status(403).json({
+      success: false,
+      message: "Forbidden: Access denied"
+    });
+  }
+
+  // 2. Retrieve the employee's face_embedding from MySQL
+  const [employees] = await pool.query(
+    "SELECT face_embedding FROM employees WHERE employee_id = ?",
+    [employeeId]
+  );
+
+  if (employees.length === 0) {
+    return res.status(404).json({
+      success: false,
+      message: "Employee not found"
+    });
+  }
+
+  const storedEmbedding = employees[0].face_embedding;
+  if (!storedEmbedding) {
+    return res.status(400).json({
+      success: false,
+      message: "Face biometric data is not registered for this employee"
+    });
+  }
+
+  // 3. Accept a selfie image from the frontend
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Selfie image is required"
+    });
+  }
+
+  // 4. Forward the selfie and stored embedding to the Flask Face Recognition Service
+  let matched = false;
+  try {
+    matched = await FaceService.verifyFace(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      storedEmbedding
+    );
+  } catch (faceError) {
+    const statusCode = faceError.status || 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: faceError.message || "Face verification error"
+    });
+  }
+
+  // 5. If matched = false, return Face verification failed
+  if (!matched) {
+    return res.status(400).json({
+      success: false,
+      message: "Face verification failed."
+    });
   }
 
   const parsedTimestamp = parseUTC(timestamp);

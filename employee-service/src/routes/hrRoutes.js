@@ -13,11 +13,18 @@ const {
   deleteHR
 } = require("../controllers/hrController");
 
+const multer = require("multer");
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
 // Only Admin can create HR
 router.post(
   "/",
   verifyToken,
   checkRole("admin"),
+  upload.single("image"),
   createHR
 );
 

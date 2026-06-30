@@ -1,9 +1,11 @@
 
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
+const FaceService = require("../services/faceService");
 
 // Create HR
 exports.createHR = async (req, res) => {
+  const connection = await db.getConnection();
   try {
     const {
       employeeId,
@@ -28,13 +30,22 @@ exports.createHR = async (req, res) => {
     }
 
     if (password.length < 8) {
-  return res.status(400).json({
-    success: false,
-    message: "Password must be at least 8 characters"
-  });
-}
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters"
+      });
+    }
+
+    // Verify face image was uploaded via multer memoryStorage
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Face image is required"
+      });
+    }
+
     // Check duplicate
-    const [existingHR] = await db.query(
+    const [existingHR] = await connection.query(
       `
       SELECT *
       FROM employees
@@ -51,12 +62,14 @@ exports.createHR = async (req, res) => {
       });
     }
 
-    // Hash password
-    const hashedPassword =
-      await bcrypt.hash(password, 10);
+    // Start Transaction to allow rollback if face generation fails
+    await connection.beginTransaction();
 
-    // Create HR
-    await db.query(
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create HR Details
+    await connection.query(
       `
       INSERT INTO employees
       (
@@ -79,18 +92,54 @@ exports.createHR = async (req, res) => {
       ]
     );
 
+    // Call face recognition service to generate embedding
+    let embedding;
+    try {
+      embedding = await FaceService.generateEmbedding(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+    } catch (faceError) {
+      // Force transaction rollback
+      throw faceError;
+    }
+
+    // Save the face embedding string into the database
+    await connection.query(
+      `
+      UPDATE employees
+      SET face_embedding = ?
+      WHERE employee_id = ?
+      `,
+      [embedding, employeeId]
+    );
+
+    // Commit changes
+    await connection.commit();
+
     res.status(201).json({
       success: true,
       message: "HR created successfully"
     });
 
   } catch (error) {
-    console.error(error);
+    // Rollback changes on failure
+    try {
+      await connection.rollback();
+    } catch (rollbackError) {
+      console.error("Rollback failed:", rollbackError.message);
+    }
 
-    res.status(500).json({
+    console.error("HR registration error:", error);
+
+    const statusCode = error.status || 500;
+    res.status(statusCode).json({
       success: false,
-      message: "Internal Server Error"
+      message: error.message || "Internal Server Error"
     });
+  } finally {
+    connection.release();
   }
 };
 

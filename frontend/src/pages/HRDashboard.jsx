@@ -57,6 +57,7 @@ function HRDashboard() {
     department: "",
     password: ""
   });
+  const [addHRPhoto, setAddHRPhoto] = useState(null);
   const [editHRForm, setEditHRForm] = useState({
     name: "",
     email: "",
@@ -223,13 +224,32 @@ function HRDashboard() {
       alert("Password must be at least 8 characters");
       return;
     }
+    if (!addHRPhoto) {
+      alert("Employee face photo is required");
+      return;
+    }
 
     try {
-      const response = await api.post("/hr", addHRForm, { headers });
+      const formData = new FormData();
+      formData.append("employeeId", addHRForm.employeeId);
+      formData.append("name", addHRForm.name);
+      formData.append("email", addHRForm.email);
+      formData.append("department", addHRForm.department);
+      formData.append("password", addHRForm.password);
+      formData.append("image", addHRPhoto);
+
+      const response = await api.post("/hr", formData, {
+        headers: {
+          ...headers,
+          "Content-Type": "multipart/form-data"
+        }
+      });
+
       if (response.data && response.data.success) {
         alert("HR Account created successfully");
         setShowAddHRModal(false);
         setAddHRForm({ employeeId: "", name: "", email: "", department: "", password: "" });
+        setAddHRPhoto(null);
         loadData();
       }
     } catch (error) {
@@ -1335,6 +1355,25 @@ function HRDashboard() {
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">Password must be at least 8 characters</p>
+              </div>
+
+              {/* Employee Photo Upload */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 tracking-wide uppercase">Employee Photo (Face Biometric)</label>
+                <div className="relative flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-4 bg-slate-50 hover:bg-slate-100/80 transition-colors cursor-pointer">
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    required
+                    onChange={(e) => setAddHRPhoto(e.target.files[0])}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <UploadCloud className="w-8 h-8 text-slate-400 mb-2" />
+                  <span className="text-sm font-semibold text-slate-600">
+                    {addHRPhoto ? addHRPhoto.name : "Choose photo..."}
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, or JPEG up to 5MB</span>
+                </div>
               </div>
 
               {/* Modal Footer Actions */}

@@ -6,9 +6,18 @@ express.Router();
 const attendanceController =
 require("../controllers/attendanceController");
 
+const verifyToken = require("../middleware/authMiddleware");
+const multer = require("multer");
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
 router.post(
-"/punch-in",
-attendanceController.punchIn
+  "/punch-in",
+  verifyToken,
+  upload.single("image"),
+  attendanceController.punchIn
 );
 
 router.post(

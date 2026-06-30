@@ -2,38 +2,49 @@
 const { getChannel } = require("../config/rabbitmq");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const FaceService = require("../services/faceService");
 
 // Register Employee
 exports.registerEmployee = async (req, res) => {
+  const connection = await db.getConnection();
   try {
-  const {
-  employeeId,
-  name,
-  email,
-  department,
-  password
-} = req.body;
-
+    const {
+      employeeId,
+      name,
+      email,
+      department,
+      password
+    } = req.body;
 
     // Required fields validation
-   if (
-  !employeeId ||
-  !name ||
-  !email ||
-  !department ||
-  !password
-) {
+    if (
+      !employeeId ||
+      !name ||
+      !email ||
+      !department ||
+      !password
+    ) {
       return res.status(400).json({
         success: false,
         message: "All fields are required"
       });
     }
-if (password.length < 8) {
-  return res.status(400).json({
-    success: false,
-    message: "Password must be at least 8 characters"
-  });
-}
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters"
+      });
+    }
+
+    // Verify face image was uploaded via multer memoryStorage
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Face image is required"
+      });
+    }
+
     // Employee ID validation
     const employeeIdRegex = /^EMP\d+$/;
 
@@ -81,7 +92,7 @@ if (password.length < 8) {
     }
 
     // Check duplicate employee
-    const [existingEmployee] = await db.query(
+    const [existingEmployee] = await connection.query(
       `
       SELECT *
       FROM employees
@@ -97,32 +108,60 @@ if (password.length < 8) {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(
-  password,
-  10
-);
-    // Save employee
-    await db.query(
+    // Start Transaction to allow rollback if face generation fails
+    await connection.beginTransaction();
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Save employee details first
+    await connection.query(
       `
-     INSERT INTO employees
-(
-  employee_id,
-  name,
-  email,
-  department,
-  password,
-  role
-)
-VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO employees
+      (
+        employee_id,
+        name,
+        email,
+        department,
+        password,
+        role
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
       `,
-[
-  employeeId,
-  name,
-  email,
-  department,
-  hashedPassword,
-  "employee"
-]    );
+      [
+        employeeId,
+        name,
+        email,
+        department,
+        hashedPassword,
+        "employee"
+      ]
+    );
+
+    // Call face recognition service to generate embedding
+    let embedding;
+    try {
+      embedding = await FaceService.generateEmbedding(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+    } catch (faceError) {
+      // Throwing error here triggers the rollback in the outer catch block
+      throw faceError;
+    }
+
+    // Save the face embedding string into the database
+    await connection.query(
+      `
+      UPDATE employees
+      SET face_embedding = ?
+      WHERE employee_id = ?
+      `,
+      [embedding, employeeId]
+    );
+
+    // If everything succeeded, commit the transaction
+    await connection.commit();
 
     // Publish RabbitMQ event
     const channel = getChannel();
@@ -151,12 +190,22 @@ VALUES (?, ?, ?, ?, ?, ?)
     });
 
   } catch (error) {
-    console.error(error);
+    // Rollback changes to the database
+    try {
+      await connection.rollback();
+    } catch (rollbackError) {
+      console.error("Rollback failed:", rollbackError.message);
+    }
 
-    res.status(500).json({
+    console.error("Registration error:", error);
+
+    const statusCode = error.status || 500;
+    res.status(statusCode).json({
       success: false,
-      message: "Internal Server Error"
+      message: error.message || "Internal Server Error"
     });
+  } finally {
+    connection.release();
   }
 };
 exports.forgotPassword = async (req, res) => {

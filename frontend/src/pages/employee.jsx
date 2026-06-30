@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import attendanceApi from "../services/attendanceApi";
 import api from "../services/api";
 import "../employee.css"; 
@@ -12,6 +12,17 @@ function Dashboard() {
   // --- Tab Selection State ---
   const [activeTab, setActiveTab] = useState("dashboard");
   const [subView, setSubView] = useState(null);
+
+  // Camera & Face Verification States
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [cameraError, setCameraError] = useState("");
+  const [verifyingFace, setVerifyingFace] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState("idle"); // idle, verifying, success, failed, error
+  const [verificationMsg, setVerificationMsg] = useState("");
+
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
   // --- Dynamic Dashboard States ---
   const [employeeName, setEmployeeName] = useState("Employee");
@@ -290,20 +301,114 @@ function Dashboard() {
     return () => clearInterval(interval);
   }, [isCheckedIn]);
 
+  const startCamera = async () => {
+    setShowCameraModal(true);
+    setVerificationStatus("idle");
+    setVerificationMsg("");
+    setCameraError("");
+    setVerifyingFace(false);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: "user" }
+      });
+      setCameraStream(stream);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (err) {
+      console.error("Camera access error:", err);
+      setCameraError("Could not access camera. Please check permissions.");
+      setVerificationStatus("error");
+      setVerificationMsg("Camera Access Failed");
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+    setShowCameraModal(false);
+  };
+
+  const captureAndVerify = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        setVerificationStatus("error");
+        setVerificationMsg("Failed to capture image.");
+        return;
+      }
+
+      setVerifyingFace(true);
+      setVerificationStatus("verifying");
+
+      const formData = new FormData();
+      formData.append("employeeId", employeeId);
+      formData.append("timestamp", getCurrentTimestamp());
+      formData.append("image", blob, "selfie.jpg");
+
+      try {
+        const response = await attendanceApi.post(
+          "/attendance/punch-in",
+          formData,
+          {
+            headers: {
+              ...headers,
+              "Content-Type": "multipart/form-data"
+            }
+          }
+        );
+
+        if (response.data && response.data.success) {
+          setVerificationStatus("success");
+          setVerificationMsg("Face Verified");
+          setIsCheckedIn(true);
+          fetchDashboardData();
+          setTimeout(() => {
+            setShowCameraModal(false);
+          }, 2000);
+        } else {
+          setVerificationStatus("failed");
+          setVerificationMsg("Face verification failed.");
+        }
+      } catch (error) {
+        console.error("Verification API error:", error);
+        const errMsg = error.response?.data?.message || "Punch In Failed";
+        
+        if (errMsg.includes("Face verification failed")) {
+          setVerificationStatus("failed");
+          setVerificationMsg("Face verification failed.");
+        } else {
+          setVerificationStatus("error");
+          setVerificationMsg(errMsg);
+        }
+      } finally {
+        setVerifyingFace(false);
+      }
+    }, "image/jpeg", 0.95);
+  };
+
   // --- Dynamic Interactive Punch Events ---
   const handlePunchIn = async () => {
-    try {
-      const response = await attendanceApi.post(
-        "/attendance/punch-in",
-        { employeeId, timestamp: getCurrentTimestamp() },
-        { headers }
-      );
-      alert(response.data.message || "Punched In Successfully");
-      setIsCheckedIn(true);
-      fetchDashboardData(); // Instantly update stats counters
-    } catch (error) {
-      alert(error.response?.data?.message || "Punch In Failed");
-    }
+    await startCamera();
   };
 
   const handlePunchOut = async () => {
@@ -1065,6 +1170,184 @@ function Dashboard() {
             </div>
           </div>
         </footer>
+      )}
+      {showCameraModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(15, 23, 42, 0.6)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: "16px"
+        }}>
+          <div style={{
+            backgroundColor: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "16px",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+            padding: "24px",
+            maxWidth: "480px",
+            width: "100%",
+            textAlign: "center"
+          }}>
+            <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>
+              Face Biometric Verification
+            </h3>
+            <p style={{ fontSize: "0.875rem", color: "#64748b", marginBottom: "16px" }}>
+              Position your face clearly in the camera frame
+            </p>
+
+            <div style={{
+              position: "relative",
+              borderRadius: "12px",
+              overflow: "hidden",
+              backgroundColor: "#f1f5f9",
+              aspectRatio: "4/3",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid #e2e8f0"
+            }}>
+              {/* Live Video */}
+              {verificationStatus === "idle" && (
+                <video 
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover"
+                  }}
+                />
+              )}
+
+              {/* Loading indicator (verifying) */}
+              {verificationStatus === "verifying" && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{
+                    width: "40px",
+                    height: "40px",
+                    border: "4px solid #f3f3f3",
+                    borderTop: "4px solid #2563eb",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite"
+                  }} />
+                  <style>{`
+                    @keyframes spin {
+                      0% { transform: rotate(0deg); }
+                      100% { transform: rotate(360deg); }
+                    }
+                  `}</style>
+                  <p style={{ marginTop: "12px", fontSize: "0.875rem", fontWeight: 600, color: "#1e293b" }}>
+                    Analyzing biometrics...
+                  </p>
+                </div>
+              )}
+
+              {/* Success Screen */}
+              {verificationStatus === "success" && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" style={{ width: "64px", height: "64px" }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p style={{ marginTop: "12px", fontSize: "1.125rem", fontWeight: 700, color: "#15803d" }}>
+                    {verificationMsg}
+                  </p>
+                </div>
+              )}
+
+              {/* Failed Screen */}
+              {verificationStatus === "failed" && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px" }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="3" style={{ width: "64px", height: "64px" }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p style={{ marginTop: "12px", fontSize: "1.125rem", fontWeight: 700, color: "#b91c1c" }}>
+                    {verificationMsg}
+                  </p>
+                </div>
+              )}
+
+              {/* Error Screen (Service down, camera block, etc) */}
+              {verificationStatus === "error" && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px" }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2.5" style={{ width: "64px", height: "64px" }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p style={{ marginTop: "12px", fontSize: "0.875rem", fontWeight: 600, color: "#c2410c", textAlign: "center" }}>
+                    {verificationMsg}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+              {verificationStatus === "idle" && (
+                <button
+                  onClick={captureAndVerify}
+                  style={{
+                    backgroundColor: "#2563eb",
+                    color: "#ffffff",
+                    fontWeight: 600,
+                    borderRadius: "12px",
+                    padding: "10px 24px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    transition: "background-color 0.2s"
+                  }}
+                >
+                  Capture & Punch In
+                </button>
+              )}
+
+              {(verificationStatus === "failed" || verificationStatus === "error") && (
+                <button
+                  onClick={startCamera}
+                  style={{
+                    backgroundColor: "#2563eb",
+                    color: "#ffffff",
+                    fontWeight: 600,
+                    borderRadius: "12px",
+                    padding: "10px 24px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    transition: "background-color 0.2s"
+                  }}
+                >
+                  Try Again
+                </button>
+              )}
+
+              <button
+                onClick={stopCamera}
+                disabled={verifyingFace}
+                style={{
+                  backgroundColor: "#ffffff",
+                  color: "#475569",
+                  fontWeight: 600,
+                  borderRadius: "12px",
+                  padding: "10px 24px",
+                  border: "1px solid #cbd5e1",
+                  cursor: verifyingFace ? "not-allowed" : "pointer",
+                  fontSize: "0.875rem",
+                  transition: "background-color 0.2s"
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+
+            {/* Hidden canvas for capturing frame */}
+            <canvas ref={canvasRef} style={{ display: "none" }} />
+          </div>
+        </div>
       )}
     </div>
   );
