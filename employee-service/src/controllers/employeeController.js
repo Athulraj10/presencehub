@@ -13,11 +13,21 @@ exports.registerEmployee = async (req, res) => {
       name,
       email,
       department,
-      password
+      password,
+  role
     } = req.body;
 
     // Required fields validation
-    if (
+   const validRoles = ["employee", "hr"];
+
+if (role && !validRoles.includes(role)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid role"
+  });
+}
+
+ if (
       !employeeId ||
       !name ||
       !email ||
@@ -133,7 +143,7 @@ exports.registerEmployee = async (req, res) => {
         email,
         department,
         hashedPassword,
-        "employee"
+        role || "employee"
       ]
     );
 
