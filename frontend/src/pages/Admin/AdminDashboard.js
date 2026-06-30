@@ -6,10 +6,12 @@ import {
   ArrowRight, Check, Trash2, LogOut, User, ShieldCheck,
   FileText, HelpCircle, KeyRound, UploadCloud
 } from "lucide-react";
-import api from "../services/api";
-import attendanceApi from "../services/attendanceApi";
-import ChangePassword from "./ChangePassword";
-import ReportIssue from "./ReportIssue";
+import api from "../../services/api";
+import attendanceApi from "../../services/attendanceApi";
+import ChangePassword from "../ChangePassword";
+import ReportIssue from "../ReportIssue";
+import "./AdminDashboard.css";
+
 function AdminDashboard() {
   const employeeId = localStorage.getItem("employeeId");
   const token = localStorage.getItem("token");
@@ -617,11 +619,6 @@ const response = await api.post(
                 </div>
               </div>
             </div>
-
-            {/* Footer */}
-            <footer className="border-t border-slate-200/60 pt-6 mt-16 flex flex-col md:flex-row justify-between items-center text-xs text-slate-400 gap-4">
-              <p>© 2024 PresenceHub Enterprise. All rights reserved.</p>
-            </footer>
           </div>
         )}
 
@@ -702,7 +699,7 @@ const response = await api.post(
                     {filteredHR.length === 0 ? (
                       <tr>
                         <td colSpan="6" className="py-8 text-center text-sm text-slate-400 bg-white">
-                          No HR accounts found matching the search.
+                           No HR accounts found matching the search.
                         </td>
                       </tr>
                     ) : (
@@ -791,11 +788,6 @@ const response = await api.post(
                 </div>
               </div>
             </div>
-
-            {/* Footer */}
-            <footer className="border-t border-slate-200/60 pt-6 mt-16 flex flex-col md:flex-row justify-between items-center text-xs text-slate-400 gap-4">
-              <p>© 2024 PresenceHub Enterprise. All rights reserved.</p>
-            </footer>
           </div>
         )}
 
@@ -934,26 +926,26 @@ const response = await api.post(
                                 <div className="fixed inset-0 z-40" onClick={() => setActiveIssueActionMenu(null)}></div>
                                 <div className="absolute right-6 mt-1 w-36 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-50 text-left">
                                   <button 
-                                    onClick={() => { setActiveIssueActionMenu(null); setSelectedIssue(iss); setShowIssueDrawer(true); }}
+                                    onClick={() => { setActiveHRActionMenu(null); setSelectedIssue(iss); setShowIssueDrawer(true); }}
                                     className="w-full px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
                                   >
                                     View Details
                                   </button>
                                   <button 
-                                    onClick={() => { setActiveIssueActionMenu(null); handleUpdateIssueStatus(iss.id, "In Progress"); }}
+                                    onClick={() => { setActiveHRActionMenu(null); handleUpdateIssueStatus(iss.id, "In Progress"); }}
                                     className="w-full px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
                                   >
                                     Set In Progress
                                   </button>
                                   <button 
-                                    onClick={() => { setActiveIssueActionMenu(null); handleUpdateIssueStatus(iss.id, "Resolved"); }}
+                                    onClick={() => { setActiveHRActionMenu(null); handleUpdateIssueStatus(iss.id, "Resolved"); }}
                                     className="w-full px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
                                   >
                                     Set Resolved
                                   </button>
                                   <div className="border-t border-slate-100 my-1"></div>
                                   <button 
-                                    onClick={() => { setActiveIssueActionMenu(null); handleDeleteIssue(iss.id); }}
+                                    onClick={() => { setActiveHRActionMenu(null); handleDeleteIssue(iss.id); }}
                                     className="w-full px-4 py-2 text-xs text-rose-600 hover:bg-rose-50/50 transition-colors"
                                   >
                                     Delete Issue

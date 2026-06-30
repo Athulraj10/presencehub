@@ -1,8 +1,8 @@
 import { useState } from "react";
 import Login from "./pages/Login";
-import AdminDashboard from "./pages/AdminDashboard";
-import HRDashboard from "./pages/HRDashboard";
-import EmployeeDashboard from "./pages/EmployeeDashboard";
+import AdminDashboard from "./pages/Admin/AdminDashboard";
+import HRDashboard from "./pages/HR/HRDashboard";
+import EmployeeDashboard from "./pages/Employee/EmployeeDashboard";
 import ForgotPassword from "./pages/ForgotPassword";
 
 function App() {
