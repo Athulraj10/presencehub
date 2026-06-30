@@ -121,6 +121,7 @@
   flex-direction: column;
   gap: 24px;
   box-sizing: border-box;
+  flex: 1;
 }
 
 /* Welcome Block alignment */
@@ -217,7 +218,7 @@
   box-shadow: 0 8px 20px rgba(0, 35, 102, 0.25);
 }
 .btn-active-in:hover {
-  background: #001a4d;
+  background: #00205b;
 }
 .btn-active-out { 
   background: #b91c1c; 
@@ -517,7 +518,7 @@
   min-width: 150px;
 }
 .btn-apply-filters:hover {
-  background: #001a4d;
+  background: #00205b;
 }
 
 /* History table styling */

@@ -6,11 +6,11 @@ import {
   ArrowRight, Check, Trash2, LogOut, User, ShieldCheck,
   FileText, HelpCircle, KeyRound, Phone, MapPin, Edit, XCircle
 } from "lucide-react";
-import api from "../services/api";
-import attendanceApi from "../services/attendanceApi";
-import ChangePassword from "./ChangePassword";
-import ReportIssue from "./ReportIssue";
-import "../HRDashboard.css";
+import api from "../../services/api";
+import attendanceApi from "../../services/attendanceApi";
+import ChangePassword from "../ChangePassword";
+import ReportIssue from "../ReportIssue";
+import "./HRDashboard.css";
 
 function HRDashboard() {
   const employeeId = localStorage.getItem("employeeId");
@@ -1495,12 +1495,6 @@ function HRDashboard() {
         </div>
       )}
 
-      {/* 4. FOOTER */}
-      <footer className="hr-dash-footer">
-        <div className="hr-footer-inner">
-          <p>© 2024 PresenceHub Enterprise. All rights reserved.</p>
-        </div>
-      </footer>
     </div>
   );
 }

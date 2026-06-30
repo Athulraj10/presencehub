@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import attendanceApi from "../services/attendanceApi";
-import api from "../services/api";
-import "../employee.css"; 
-import ChangePassword from "./ChangePassword";
-import ReportIssue from "./ReportIssue";
+import attendanceApi from "../../services/attendanceApi";
+import api from "../../services/api";
+import "./EmployeeDashboard.css"; 
+import ChangePassword from "../ChangePassword";
+import ReportIssue from "../ReportIssue";
 
 function EmployeeDashboard() {
   const employeeId = localStorage.getItem("employeeId");
@@ -456,7 +456,15 @@ function EmployeeDashboard() {
   const designation = profileData?.designation || "Senior Developer";
   const department = profileData?.department || "Engineering Team";
   const phoneNumber = profileData?.phone_number || profileData?.phone || "+1 (555) 012-3456";
-  const workLocation = profileData?.work_location || profileData?.location || "Tower A, 4th Floor, Tech Park Central";
+  const workLocation = profileData?.work_location || profileData?.location || (
+    <>
+      GNX Digital Solutions<br />
+      Nila Building, Technopark Phase I<br />
+      Technopark Road<br />
+      Thiruvananthapuram, Kerala 695581<br />
+      India
+    </>
+  );
 
   return (
     <div className={`dashboard-container ${activeTab === "profile" ? "profile-page-active" : ""}`}>
@@ -1102,24 +1110,11 @@ function EmployeeDashboard() {
                     <span>Logout</span>
                   </button>
                 </div>
-
-                {/* 5. Footer */}
-                <div className="profile-page-footer">
-                  <div className="profile-footer-copyright">© 2024 PresenceHub Enterprise. All rights reserved.</div>
-                </div>
               </div>
             )}
           </>
         )}
       </main>
-
-      {activeTab !== "profile" && (
-        <footer className="dash-footer">
-          <div className="footer-inner">
-            <div>© 2024 PresenceHub Enterprise. All rights reserved.</div>
-          </div>
-        </footer>
-      )}
     </div>
   );
 }
