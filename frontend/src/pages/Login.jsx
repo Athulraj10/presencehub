@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Mail, Lock, Shield, Eye, EyeOff, HelpCircle, Globe, ArrowRight } from "lucide-react";
+import { Mail, Lock, Shield, Eye, EyeOff, HelpCircle, Globe, ArrowRight, AlertCircle } from "lucide-react";
 import api from "../services/api";
 
 function Login({ onLogin, onForgotPassword }) {
@@ -8,10 +8,31 @@ function Login({ onLogin, onForgotPassword }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // --- Custom Alert Modal States ---
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    title: "",
+    message: "",
+    type: "info",
+    onConfirm: null
+  });
+
+  const showCustomModal = (title, message, type = "info", onConfirm = null) => {
+    setModalConfig({ title, message, type, onConfirm });
+    setModalOpen(true);
+  };
+
+  const closeCustomModal = () => {
+    setModalOpen(false);
+    if (modalConfig.onConfirm) {
+      modalConfig.onConfirm();
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) {
-      alert("Please fill in all fields");
+      showCustomModal("Error", "Please fill in all fields", "error");
       return;
     }
 
@@ -29,9 +50,12 @@ function Login({ onLogin, onForgotPassword }) {
       // Let's store the email too for Change Password and other profile features
       localStorage.setItem("employeeEmail", email);
 
-      onLogin();
+      showCustomModal("Success", "Login Successful", "success", () => {
+        onLogin(response.data.role);
+      });
+
     } catch (error) {
-      alert(error.response?.data?.message || "Login Failed");
+      showCustomModal("Error", error.response?.data?.message || "Login Failed", "error");
     } finally {
       setLoading(false);
     }
@@ -121,6 +145,29 @@ function Login({ onLogin, onForgotPassword }) {
           </button>
         </form>
       </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-[90%] max-w-sm p-6 shadow-2xl border border-slate-100 text-center flex flex-col items-center animate-in zoom-in-95 duration-200">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${
+              modalConfig.type === 'success' ? 'bg-emerald-50 text-emerald-500' :
+              modalConfig.type === 'error' ? 'bg-rose-50 text-rose-500' : 'bg-blue-50 text-blue-500'
+            }`}>
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{modalConfig.title}</h3>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              {modalConfig.message}
+            </p>
+            <button 
+              onClick={closeCustomModal}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all shadow-md"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

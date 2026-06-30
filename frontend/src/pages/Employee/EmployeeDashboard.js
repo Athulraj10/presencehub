@@ -34,10 +34,34 @@ function EmployeeDashboard() {
     return colors[sum % colors.length];
   };
 
+  // --- Custom Alert Modal States ---
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    title: "",
+    message: "",
+    type: "info",
+    onConfirm: null
+  });
+
+  const showCustomModal = (title, message, type = "info", onConfirm = null) => {
+    setModalConfig({ title, message, type, onConfirm });
+    setModalOpen(true);
+  };
+
+  const closeCustomModal = () => {
+    setModalOpen(false);
+    if (modalConfig.onConfirm) {
+      modalConfig.onConfirm();
+    }
+  };
+
   // --- Dynamic Dashboard States ---
   const [employeeName, setEmployeeName] = useState("Employee");
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [activeDuration, setActiveDuration] = useState("00:00:00");
+  const [isInsideRadius, setIsInsideRadius] = useState(true);
+  const [simulateOutside, setSimulateOutside] = useState(false);
+  const [notifiedBreach, setNotifiedBreach] = useState(false);
   const [stats, setStats] = useState({
     presentDays: 0,
     totalDays: 22, // Default base denominator
@@ -125,7 +149,7 @@ function EmployeeDashboard() {
   // --- Fetch Real-time Database Records On Mount ---
   const fetchDashboardData = async () => {
     try {
-      const dashboardResponse = await attendanceApi.get(`/attendance/dashboard/${employeeId}`, { headers });
+      const dashboardResponse = await attendanceApi.get(`/dashboard/${employeeId}`, { headers });
       
       if (dashboardResponse.data && dashboardResponse.data.success) {
         const data = dashboardResponse.data.data;
@@ -143,6 +167,19 @@ function EmployeeDashboard() {
         setIsCheckedIn(data.isCheckedIn ?? false);
         setActiveDuration(data.activeDuration || "00:00:00");
 
+        if (data.hasBreachAlert) {
+          if (!notifiedBreach) {
+            setNotifiedBreach(true);
+            showCustomModal(
+              "Geofence Breach Alert",
+              "Warning: You have been outside the office geofence radius for more than 10 minutes. This breach has been logged and reported to HR.",
+              "error"
+            );
+          }
+        } else {
+          setNotifiedBreach(false);
+        }
+
         // UI Representation string fallback replacement helper
         if (data.employeeName === "EMP200" || data.employeeName === "Arjun") {
           setEmployeeName("Arjun");
@@ -152,7 +189,7 @@ function EmployeeDashboard() {
       }
 
       // Hit the valid /alerts route for custom profile alerts
-      const alertsResponse = await attendanceApi.get(`/attendance/alerts/${employeeId}`, { headers });
+      const alertsResponse = await attendanceApi.get(`/alerts/${employeeId}`, { headers });
       if (alertsResponse.data && alertsResponse.data.success) {
         const fetchedAlerts = alertsResponse.data.alerts || [];
         if (fetchedAlerts.length === 0) {
@@ -194,7 +231,7 @@ function EmployeeDashboard() {
   const fetchHistoryData = async () => {
     try {
       setHistoryLoading(true);
-      const response = await attendanceApi.get(`/attendance/${employeeId}`, {
+      const response = await attendanceApi.get(`/${employeeId}`, {
         headers,
         params: { page: 1, limit: 200 }
       });
@@ -229,15 +266,15 @@ function EmployeeDashboard() {
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     if (!newPassword || !confirmPassword) {
-      alert("Please fill in all password fields.");
+      showCustomModal("Error", "Please fill in all password fields.", "error");
       return;
     }
     if (newPassword.length < 8) {
-      alert("Password must be at least 8 characters long.");
+      showCustomModal("Error", "Password must be at least 8 characters long.", "error");
       return;
     }
     if (newPassword !== confirmPassword) {
-      alert("New passwords do not match.");
+      showCustomModal("Error", "New passwords do not match.", "error");
       return;
     }
 
@@ -250,11 +287,11 @@ function EmployeeDashboard() {
           newPassword
         }
       );
-      alert(response.data.message || "Password updated successfully!");
+      showCustomModal("Success", response.data.message || "Password updated successfully!", "success");
       setNewPassword("");
       setConfirmPassword("");
     } catch (error) {
-      alert(error.response?.data?.message || "Password update failed");
+      showCustomModal("Error", error.response?.data?.message || "Password update failed", "error");
     } finally {
       setPasswordUpdating(false);
     }
@@ -311,41 +348,164 @@ function EmployeeDashboard() {
     return () => clearInterval(interval);
   }, [isCheckedIn]);
 
+  // --- Geofence Background Location Ping Loop ---
+  useEffect(() => {
+    let interval = null;
+    if (isCheckedIn) {
+      const sendLocationPing = async () => {
+        const clickTimestamp = getCurrentTimestamp();
+        const performPing = async (lat, lng) => {
+          try {
+            const response = await attendanceApi.post(
+              "/location-ping",
+              {
+                employeeId,
+                timestamp: clickTimestamp,
+                latitude: lat,
+                longitude: lng
+              },
+              { headers }
+            );
+            if (response.data && response.data.success) {
+              setIsInsideRadius(response.data.isInside !== false);
+            }
+          } catch (error) {
+            console.error("Location ping error:", error);
+          }
+        };
+
+        if (simulateOutside) {
+          performPing(9.000000, 77.000000);
+        } else if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const lat = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+                ? 8.56037031
+                : position.coords.latitude;
+              const lng = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+                ? 76.88028618
+                : position.coords.longitude;
+              performPing(lat, lng);
+            },
+            (error) => {
+              console.warn("Background geolocation failed, using office fallback:", error.message);
+              performPing(8.56037031, 76.88028618);
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+          );
+        } else {
+          performPing(8.56037031, 76.88028618);
+        }
+
+        // Also fetch dashboard data to sync stats & check for breach warning limits (10 mins)
+        fetchDashboardData();
+      };
+
+      sendLocationPing();
+      interval = setInterval(sendLocationPing, 10000); // Poll location ping every 10 seconds
+    } else {
+      setIsInsideRadius(true);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isCheckedIn, simulateOutside, employeeId]);
+
   // --- Dynamic Interactive Punch Events ---
   const handlePunchIn = async () => {
-    try {
-      const response = await attendanceApi.post(
-        "/attendance/punch-in",
-        { employeeId, timestamp: getCurrentTimestamp() },
-        { headers }
+    const clickTimestamp = getCurrentTimestamp();
+    const performPunchIn = async (lat, lng) => {
+      try {
+        const response = await attendanceApi.post(
+          "/punch-in",
+          {
+            employeeId,
+            timestamp: clickTimestamp,
+            latitude: lat,
+            longitude: lng
+          },
+          { headers }
+        );
+        setIsCheckedIn(true);
+        fetchDashboardData(); // Instantly update stats counters
+        showCustomModal("Success", response.data.message || "Punched In Successfully", "success");
+      } catch (error) {
+        showCustomModal("Error", error.response?.data?.message || "Punch In Failed", "error");
+      }
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+            ? 8.56037031
+            : position.coords.latitude;
+          const lng = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+            ? 76.88028618
+            : position.coords.longitude;
+          performPunchIn(lat, lng);
+        },
+        (error) => {
+          console.warn("Geolocation failed, using office location fallback:", error.message);
+          performPunchIn(8.56037031, 76.88028618);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
       );
-      alert(response.data.message || "Punched In Successfully");
-      setIsCheckedIn(true);
-      fetchDashboardData(); // Instantly update stats counters
-    } catch (error) {
-      alert(error.response?.data?.message || "Punch In Failed");
+    } else {
+      performPunchIn(8.56037031, 76.88028618);
     }
   };
 
   const handlePunchOut = async () => {
-    try {
-      const response = await attendanceApi.post(
-        "/attendance/punch-out",
-        { employeeId, timestamp: getCurrentTimestamp() },
-        { headers }
+    const clickTimestamp = getCurrentTimestamp();
+    const performPunchOut = async (lat, lng) => {
+      try {
+        const response = await attendanceApi.post(
+          "/punch-out",
+          {
+            employeeId,
+            timestamp: clickTimestamp,
+            latitude: lat,
+            longitude: lng
+          },
+          { headers }
+        );
+        setIsCheckedIn(false);
+        fetchDashboardData(); // Instantly update stats counters
+        showCustomModal("Success", response.data.message || "Punched Out Successfully", "success");
+      } catch (error) {
+        showCustomModal("Error", error.response?.data?.message || "Punch Out Failed", "error");
+      }
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+            ? 8.56037031
+            : position.coords.latitude;
+          const lng = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+            ? 76.88028618
+            : position.coords.longitude;
+          performPunchOut(lat, lng);
+        },
+        (error) => {
+          console.warn("Geolocation failed, using office location fallback:", error.message);
+          performPunchOut(8.56037031, 76.88028618);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
       );
-      alert(response.data.message || "Punched Out Successfully");
-      setIsCheckedIn(false);
-      fetchDashboardData(); // Instantly update stats counters
-    } catch (error) {
-      alert(error.response?.data?.message || "Punch Out Failed");
+    } else {
+      performPunchOut(8.56037031, 76.88028618);
     }
   };
 
   const handleLogout = () => {
     localStorage.clear();
-    alert("Logged Out Successfully");
-    window.location.reload();
+    showCustomModal("Logged Out", "Logged Out Successfully", "success", () => {
+      window.location.reload();
+    });
   };
 
   // --- Process and Filter History Data ---
@@ -354,8 +514,17 @@ function EmployeeDashboard() {
     const defaultStart = new Date();
     defaultStart.setDate(today.getDate() - 30);
     
-    const startLimit = appliedFromDate ? new Date(appliedFromDate) : defaultStart;
+    let startLimit = appliedFromDate ? new Date(appliedFromDate) : defaultStart;
     const endLimit = appliedToDate ? new Date(appliedToDate) : today;
+    
+    // Restrict history view range to start no earlier than when the employee was registered
+    if (profileData?.created_at) {
+      const hireDate = new Date(profileData.created_at);
+      hireDate.setHours(0, 0, 0, 0);
+      if (startLimit < hireDate) {
+        startLimit = hireDate;
+      }
+    }
     
     startLimit.setHours(0, 0, 0, 0);
     endLimit.setHours(23, 59, 59, 999);
@@ -364,7 +533,37 @@ function EmployeeDashboard() {
     historyRecords.forEach(row => {
       const dateKey = getKolkataDateString(row.attendance_date);
       if (dateKey) {
-        dbMap[dateKey] = row;
+        if (!dbMap[dateKey]) {
+          dbMap[dateKey] = {
+            ...row,
+            working_hours: row.working_hours ? Number(row.working_hours) : 0,
+            sessions: [row]
+          };
+        } else {
+          const existing = dbMap[dateKey];
+          existing.sessions.push(row);
+          existing.working_hours += row.working_hours ? Number(row.working_hours) : 0;
+          
+          if (row.punch_in && (!existing.punch_in || new Date(row.punch_in) < new Date(existing.punch_in))) {
+            existing.punch_in = row.punch_in;
+          }
+          if (!row.punch_out || !existing.punch_out) {
+            existing.punch_out = null;
+          } else if (new Date(row.punch_out) > new Date(existing.punch_out)) {
+            existing.punch_out = row.punch_out;
+          }
+          if (row.is_late) {
+            existing.is_late = true;
+          }
+        }
+      }
+    });
+
+    Object.keys(dbMap).forEach(key => {
+      if (dbMap[key].working_hours > 0) {
+        dbMap[key].working_hours = dbMap[key].working_hours.toFixed(2);
+      } else {
+        dbMap[key].working_hours = null;
       }
     });
     
@@ -597,23 +796,44 @@ function EmployeeDashboard() {
             {/* RADAR STRIP */}
             <div className="location-strip">
               <div className="loc-left">
-                <div className="loc-icon-bg">
+                <div className="loc-icon-bg" style={{ backgroundColor: isInsideRadius ? "#eef2ff" : "#fef2f2", color: isInsideRadius ? "#002366" : "#ef4444" }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="loc-icon">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
                 </div>
                 <div>
-                  <h4>Location: Office HQ</h4>
-                  <p>Inside Office Radius - Verified via Wi-Fi & GPS</p>
+                  <h4>Location: {isInsideRadius ? "Office HQ" : "Outside Geofence"}</h4>
+                  <p>{isInsideRadius ? "Inside Office Radius - Verified via Wi-Fi & GPS" : "Outside Office Radius - Breach Logged & Reported"}</p>
                 </div>
               </div>
-              <span className="verified-tag">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="check-icon">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                VERIFIED
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                {(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && (
+                  <button 
+                    onClick={() => setSimulateOutside(!simulateOutside)}
+                    className="custom-modal-btn"
+                    style={{ height: "32px", padding: "0 12px", fontSize: "11px", background: simulateOutside ? "#dc2626" : "#002366" }}
+                  >
+                    {simulateOutside ? "Simulating Outside" : "Simulate Outside"}
+                  </button>
+                )}
+                <span 
+                  className="verified-tag"
+                  style={!isInsideRadius ? { color: "#dc2626", background: "#fdf2f2", borderColor: "#fecaca" } : {}}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="check-icon">
+                    {isInsideRadius ? (
+                      <polyline points="20 6 9 17 4 12" />
+                    ) : (
+                      <>
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </>
+                    )}
+                  </svg>
+                  {isInsideRadius ? "VERIFIED" : "BREACHED"}
+                </span>
+              </div>
             </div>
 
             {/* 4 RECTANGULAR GRID CARDS */}
@@ -876,7 +1096,7 @@ function EmployeeDashboard() {
                             <button 
                               className="info-btn" 
                               title="View details"
-                              onClick={() => alert(`Details for ${primary}:\nStatus: ${row.isAbsent ? "Absent" : row.is_late ? "Late" : "Present"}\nHours Worked: ${row.working_hours || "0"}`)}
+                              onClick={() => showCustomModal(`Details for ${primary}`, `Status: ${row.isAbsent ? "Absent" : row.is_late ? "Late" : "Present"} | Hours Worked: ${row.working_hours || "0"} hours`, "info")}
                             >
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
                                 <circle cx="12" cy="12" r="10" />
@@ -938,10 +1158,8 @@ function EmployeeDashboard() {
                 {/* 1. Hero Card */}
                 <div className="profile-white-card profile-hero-card">
                   <div className="profile-photo-wrapper">
-                    <div className={`w-[120px] h-[120px] rounded-full text-white flex items-center justify-center text-3xl font-bold ${getAvatarBg(profileData?.name || employeeName)} border border-slate-200 shadow-md`}>
-                      {getInitials(profileData?.name || employeeName) || "EM"}
-                    </div>
-                    <button className="profile-photo-edit-btn" onClick={() => alert("Upload feature restricted to HR Portal.")}>
+                    <img src={profileImage} alt="Profile" className="profile-photo-img" />
+                    <button className="profile-photo-edit-btn" onClick={() => showCustomModal("Access Restricted", "Upload feature restricted to HR Portal.", "info")}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="edit-icon-svg" style={{ width: 14, height: 14 }}>
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                         <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -981,7 +1199,7 @@ function EmployeeDashboard() {
                       </svg>
                       <h3>Contact Details</h3>
                     </div>
-                    <a href="#update" className="profile-update-link" onClick={(e) => { e.preventDefault(); alert("Update feature restricted to HR Portal."); }}>Update</a>
+                    <a href="#update" className="profile-update-link" onClick={(e) => { e.preventDefault(); showCustomModal("Access Restricted", "Update feature restricted to HR Portal.", "info"); }}>Update</a>
                   </div>
                   <div className="profile-contact-grid">
                     <div className="contact-field">
@@ -1030,7 +1248,7 @@ function EmployeeDashboard() {
                           <polyline points="9 18 15 12 9 6" />
                         </svg>
                       </div>
-                      <div className="settings-item" onClick={() => alert("Notification Settings are managed by HR System.")}>
+                      <div className="settings-item" onClick={() => showCustomModal("Access Restricted", "Notification Settings are managed by HR System.", "info")}>
                         <div className="settings-item-left">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="settings-icon" style={{ width: 18, height: 18 }}>
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -1071,7 +1289,7 @@ function EmployeeDashboard() {
                           <polyline points="9 18 15 12 9 6" />
                         </svg>
                       </div>
-                      <div className="settings-item" onClick={() => alert("Connecting to Support Chat...")}>
+                      <div className="settings-item" onClick={() => showCustomModal("Support Chat", "Connecting to Support Chat...", "info")}>
                         <div className="settings-item-left">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="settings-icon" style={{ width: 18, height: 18 }}>
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -1115,6 +1333,58 @@ function EmployeeDashboard() {
           </>
         )}
       </main>
+
+      {activeTab !== "profile" && (
+        <footer className="dash-footer">
+          <div className="footer-inner">
+            <div>ENTERPRISE DASHBOARD V2.4.0 • BUILD ID: PX-8821</div>
+            <div className="footer-sub-links">
+              <a href="#privacy" onClick={(e) => { e.preventDefault(); showCustomModal("Privacy Policy", "Privacy policy content coming soon.", "info"); }}>Privacy Policy</a>
+              <a href="#support" onClick={(e) => { e.preventDefault(); showCustomModal("Support Hub", "Support hub is available via HR Desk.", "info"); }}>Support Hub</a>
+              <a href="#terms" onClick={(e) => { e.preventDefault(); showCustomModal("Terms of Service", "Terms of Service agreed at onboarding.", "info"); }}>Terms of Service</a>
+            </div>
+          </div>
+        </footer>
+      )}
+
+      {modalOpen && (
+        <div className="custom-modal-backdrop">
+          <div className="custom-modal-card">
+            <div className={`custom-modal-icon-container ${modalConfig.type}`}>
+              {modalConfig.type === "success" && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="custom-modal-icon">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+              {modalConfig.type === "error" && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="custom-modal-icon">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              )}
+              {modalConfig.type === "info" && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="custom-modal-icon">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              )}
+            </div>
+            <h3 className="custom-modal-title">{modalConfig.title}</h3>
+            <p className="custom-modal-message">
+              {modalConfig.message.split("\n").map((line, i) => (
+                <React.Fragment key={i}>
+                  {line}
+                  {i < modalConfig.message.split("\n").length - 1 && <br />}
+                </React.Fragment>
+              ))}
+            </p>
+            <button className="custom-modal-btn" onClick={closeCustomModal}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

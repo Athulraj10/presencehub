@@ -19,6 +19,30 @@ function HRDashboard() {
   // Subview State (for full screen subviews: Change Password / Report Issue)
   const [subView, setSubView] = useState(null); // 'change-password' | 'report-issue'
 
+  // --- Custom Alert Modal States ---
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    title: "",
+    message: "",
+    type: "info",
+    onConfirm: null
+  });
+
+  const showCustomModal = (title, message, type = "info", onConfirm = null) => {
+    setModalConfig({ title, message, type, onConfirm });
+    setModalOpen(true);
+  };
+
+  const closeCustomModal = () => {
+    setModalOpen(false);
+    if (modalConfig.onConfirm) {
+      modalConfig.onConfirm();
+    }
+  };
+
+  // --- Geofence Breach States ---
+  const [notifiedBreachIds, setNotifiedBreachIds] = useState([]);
+
   // Navigation state: "dashboard" | "employees" | "attendance" | "profile"
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -184,11 +208,46 @@ function HRDashboard() {
     fetchAttendanceForSelectedDate();
   }, [selectedDate]);
 
+  // --- Geofence Breach Polling Effect ---
+  useEffect(() => {
+    const fetchBreaches = async () => {
+      try {
+        const response = await api.get("/attendance/breaches", { headers });
+        if (response.data && response.data.success) {
+          const activeBreaches = response.data.breaches || [];
+          
+          // Find any breach that we haven't notified HR about yet
+          const newBreach = activeBreaches.find(b => !notifiedBreachIds.includes(b.id));
+          
+          if (newBreach) {
+            setNotifiedBreachIds(prev => [...prev, newBreach.id]);
+            
+            const elapsedMins = Math.floor((new Date() - new Date(newBreach.breach_start)) / 60000);
+            showCustomModal(
+              "Geofence Breach Alert",
+              `Warning: Employee ${newBreach.employee_name} (${newBreach.employee_id}) has been outside the office geofence radius for ${elapsedMins} minutes.`,
+              "error"
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Error checking geofence breaches for HR:", err);
+      }
+    };
+
+    if (token) {
+      fetchBreaches();
+      const interval = setInterval(fetchBreaches, 10000); // Check every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [token, notifiedBreachIds]);
+
   // Handle Logout
   const handleLogout = () => {
     localStorage.clear();
-    alert("Logged Out Successfully");
-    window.location.reload();
+    showCustomModal("Logged Out", "Logged Out Successfully", "success", () => {
+      window.location.reload();
+    });
   };
 
   // Helper for generating colored initials avatars
@@ -1494,7 +1553,40 @@ function HRDashboard() {
           </div>
         </div>
       )}
+      {/* 4. FOOTER */}
+      <footer className="hr-dash-footer">
+        <div className="hr-footer-inner">
+          <p>© 2024 PresenceHub Enterprise. All rights reserved.</p>
+        </div>
+      </footer>
 
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-[90%] max-w-sm p-6 shadow-2xl border border-slate-100 text-center flex flex-col items-center animate-in zoom-in-95 duration-200">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${
+              modalConfig.type === 'success' ? 'bg-emerald-50 text-emerald-500' :
+              modalConfig.type === 'error' ? 'bg-rose-50 text-rose-500' : 'bg-blue-50 text-blue-500'
+            }`}>
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{modalConfig.title}</h3>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              {modalConfig.message.split("\n").map((line, i) => (
+                <React.Fragment key={i}>
+                  {line}
+                  {i < modalConfig.message.split("\n").length - 1 && <br />}
+                </React.Fragment>
+              ))}
+            </p>
+            <button 
+              onClick={closeCustomModal}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all shadow-md"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

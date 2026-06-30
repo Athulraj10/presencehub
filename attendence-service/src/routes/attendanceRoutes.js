@@ -12,6 +12,11 @@ attendanceController.punchIn
 );
 
 router.post(
+    "/location-ping", 
+    attendanceController.locationPing
+);
+
+router.post(
 "/punch-out",
 attendanceController.punchOut
 );
@@ -39,6 +44,11 @@ attendanceController.getAttendanceSummary
 router.get(
 "/report/:employeeId",
 attendanceController.getAttendanceReport
+);
+
+router.get(
+  "/breaches",
+  attendanceController.getBreaches
 );
 
 router.get(
