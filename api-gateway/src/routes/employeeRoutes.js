@@ -2,13 +2,53 @@ const express = require('express');
 const proxy = require('express-http-proxy');
 const router = express.Router();
 
-const EMPLOYEE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:3001';
+const EMPLOYEE_URL =
+  process.env.EMPLOYEE_SERVICE_URL ||
+  'http://localhost:3001';
 
-module.exports = (validateJwtOnlyIfServiceIsApproved) => {
-    // Mounts to /employees/ via index.js
-    router.use('/', validateJwtOnlyIfServiceIsApproved('employee-service'), proxy(EMPLOYEE_URL, {
-        proxyReqPathResolver: (req) => `/employees${req.url}`
-    }));
+console.log("EMPLOYEE_URL =", EMPLOYEE_URL);
 
-    return router;
+module.exports = (
+  validateJwtOnlyIfServiceIsApproved
+) => {
+
+  // Public Login Route
+  router.use(
+    '/login',
+    proxy(EMPLOYEE_URL, {
+      proxyReqPathResolver: () =>
+        '/employees/login'
+    })
+  );
+
+  // Public Employee Exists Route
+  router.use(
+    '/exists',
+    proxy(EMPLOYEE_URL, {
+      proxyReqPathResolver: (req) =>
+        `/employees/exists${req.url}`
+    })
+  );
+
+  // Protected Routes
+  router.use(
+    '/',
+    validateJwtOnlyIfServiceIsApproved(
+      'employee-service'
+    ),
+    proxy(EMPLOYEE_URL, {
+      proxyReqPathResolver: (req) =>
+        `/employees${req.url}`
+    })
+  );
+
+  return router;
 };
+
+
+
+
+
+
+
+
